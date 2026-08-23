@@ -26,5 +26,8 @@ env/
 data/raw/
 data/processed/
 
-# Logs
+# Logs & Captures
 logs/
+aura_capture_*.jpg
+*.avi
+
