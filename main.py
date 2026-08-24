@@ -1,8 +1,9 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
-Milestone 1: Real-Time Computer Vision Pipeline (Camera -> OpenCV -> YOLO Detection)
+Milestone 2: Real-Time Computer Vision & Feature Extraction Pipeline
+(Camera -> OpenCV -> YOLO Detection -> FeatureBuilder -> VisionPipeline)
 
-Entry point for running live detection, benchmarking, or testing without GUI.
+Entry point for running live detection, feature extraction, dataset collection, or benchmarking.
 """
 
 import sys
@@ -13,8 +14,11 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from config.config import AuraConfig
 from vision.camera import CameraAdapter, CameraNotFoundError, Frame
 from vision.detector import ObjectDetector, ModelLoadError
+from vision.features import FeatureBuilder
+from vision.dataset_collector import DatasetCollector
 
 # Setup logging
 logging.basicConfig(
@@ -27,7 +31,7 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AURA Visual Intelligence Assistant - Milestone 1"
+        description="AURA Visual Intelligence Assistant - Milestone 2 (Vision & Features)"
     )
     parser.add_argument(
         "--source",
@@ -81,6 +85,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Stop automatically after processing N frames.",
     )
+    parser.add_argument(
+        "--collect-dataset",
+        type=str,
+        default=None,
+        help="Path to CSV file where extracted detection features should be recorded (e.g., 'data/features.csv').",
+    )
     return parser.parse_args()
 
 
@@ -127,7 +137,7 @@ def draw_hud(
     image[:hud_h, :] = cv2.addWeighted(hud_bg, 0.35, dark_overlay, 0.65, 0).astype(np.uint8)
 
     # Info string
-    hud_text = f"AURA M1  |  FPS: {fps:5.1f}  |  Latency: {latency_ms:4.1f}ms  |  Detections: {num_detections:2d}  |  Model: {model_name}"
+    hud_text = f"AURA M2  |  FPS: {fps:5.1f}  |  Latency: {latency_ms:4.1f}ms  |  Detections: {num_detections:2d}  |  Model: {model_name}"
     cv2.putText(
         image,
         hud_text,
@@ -151,13 +161,13 @@ def run_pipeline(
     headless: bool = False,
     benchmark: bool = False,
     max_frames: Optional[int] = None,
+    dataset_csv: Optional[str] = None,
 ) -> int:
-    """Main execution loop for AURA Milestone 1."""
-    # Parse source
+    """Main execution loop for AURA Milestone 2."""
     source_target = int(source_val) if source_val.isdigit() else source_val
 
-    # Initialize ObjectDetector
-    logger.info("Initializing ObjectDetector...")
+    # Initialize ObjectDetector and FeatureBuilder
+    logger.info("Initializing ObjectDetector and FeatureBuilder...")
     try:
         detector = ObjectDetector(
             model_name=model_name,
@@ -167,6 +177,9 @@ def run_pipeline(
     except ModelLoadError as e:
         logger.error(f"Detector initialization failed: {e}")
         return 1
+
+    feature_builder = FeatureBuilder()
+    collector = DatasetCollector() if dataset_csv else None
 
     # Initialize CameraAdapter
     use_synthetic = False
@@ -193,7 +206,7 @@ def run_pipeline(
                 logger.info("Tip: Pass '--source synthetic' or '--headless --benchmark' to run automated testing without a camera.")
                 return 1
 
-    window_name = "AURA - Milestone 1 (OpenCV + YOLO)"
+    window_name = "AURA - Milestone 2 (Vision & Features)"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
@@ -204,6 +217,7 @@ def run_pipeline(
     alpha = 0.1  # Smoothing factor for FPS
 
     logger.info("Starting visual processing loop. Press 'q' or ESC in window to exit...")
+    logger.info("Controls: 'q'=Quit, 's'=Save Snapshot, 'c'=Print Detections, 'f'=Print Extracted Features")
 
     try:
         while True:
@@ -220,18 +234,23 @@ def run_pipeline(
 
             t_cap = time.perf_counter()
 
-            # 2. Run Object Detection
+            # 2. Run Object Detection & Feature Extraction
             detections = detector.detect(frame)
+            features = feature_builder.extract_all(frame, detections) if detections else []
             t_infer = time.perf_counter()
             infer_latency_ms = (t_infer - t_cap) * 1000.0
             total_latency += infer_latency_ms
 
-            # 3. Calculate FPS
+            # 3. Record to Dataset if requested
+            if collector is not None and features:
+                collector.add_samples(features)
+
+            # 4. Calculate FPS
             loop_time = t_infer - t0
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = current_fps if frame_count == 0 else (alpha * current_fps + (1 - alpha) * fps_ema)
 
-            # 4. Render Annotations & HUD
+            # 5. Render Annotations & HUD
             annotated_frame = detector.annotate(frame, detections)
             annotated_frame = draw_hud(
                 annotated_frame,
@@ -246,10 +265,10 @@ def run_pipeline(
             # Log periodic stats in headless/benchmark mode
             if frame_count % 30 == 0 or frame_count == 1:
                 logger.info(
-                    f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)}"
+                    f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)} | Features: {len(features)}"
                 )
 
-            # 5. Display GUI if not headless
+            # 6. Display GUI if not headless
             if not headless:
                 cv2.imshow(window_name, annotated_frame)
                 key = cv2.waitKey(1) & 0xFF
@@ -257,10 +276,13 @@ def run_pipeline(
                     logger.info("Exit key pressed by user.")
                     break
                 elif key in (ord('c'), ord('C')):
-                    # Print structured detections to console
                     logger.info(f"Structured detections at frame {frame_count}:")
                     for d in detections:
                         print(" ", d.to_dict())
+                elif key in (ord('f'), ord('F')):
+                    logger.info(f"Extracted features at frame {frame_count}:")
+                    for feat in features:
+                        print(" ", feat.to_dict())
                 elif key in (ord('s'), ord('S')):
                     filename = f"aura_capture_{int(time.time())}.jpg"
                     cv2.imwrite(filename, annotated_frame)
@@ -279,11 +301,14 @@ def run_pipeline(
         avg_latency = total_latency / max(frame_count, 1)
 
         logger.info("=" * 60)
-        logger.info(f"AURA Milestone 1 Execution Summary:")
+        logger.info("AURA Milestone 2 Execution Summary:")
         logger.info(f"  Total frames processed : {frame_count}")
         logger.info(f"  Total elapsed time     : {total_time:.2f} s")
         logger.info(f"  Average throughput     : {avg_fps:.1f} FPS")
         logger.info(f"  Average infer latency  : {avg_latency:.2f} ms")
+        if collector is not None and collector.count > 0:
+            collector.to_csv(dataset_csv)
+            logger.info(f"  Dataset samples saved  : {collector.count} to '{dataset_csv}'")
         logger.info("=" * 60)
 
         if camera is not None:
@@ -306,6 +331,7 @@ def main():
         headless=args.headless or args.benchmark,
         benchmark=args.benchmark,
         max_frames=args.frames if args.frames is not None else (50 if args.benchmark else None),
+        dataset_csv=args.collect_dataset,
     )
 
 
