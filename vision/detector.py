@@ -27,6 +27,8 @@ class Detection:
     confidence: float
     bbox: List[float]  # [x1, y1, x2, y2] in pixel coordinates
     track_id: Optional[int] = None
+    reliability_score: Optional[float] = None
+    reliability_label: Optional[str] = None
 
     @property
     def x1(self) -> float:
@@ -73,13 +75,17 @@ class Detection:
 
     def to_dict(self) -> Dict[str, Any]:
         """Converts Detection to a standard dictionary matching the SSD specification."""
-        return {
+        d = {
             "track_id": self.track_id,
             "class_id": self.class_id,
             "class_name": self.class_name,
             "confidence": round(float(self.confidence), 4),
             "bbox": [round(float(c), 2) for c in self.bbox],
         }
+        if self.reliability_score is not None:
+            d["reliability_score"] = round(float(self.reliability_score), 4)
+            d["reliability_label"] = self.reliability_label
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Detection":
@@ -90,6 +96,8 @@ class Detection:
             confidence=float(data["confidence"]),
             bbox=[float(c) for c in data["bbox"]],
             track_id=int(data["track_id"]) if data.get("track_id") is not None else None,
+            reliability_score=float(data["reliability_score"]) if data.get("reliability_score") is not None else None,
+            reliability_label=str(data["reliability_label"]) if data.get("reliability_label") is not None else None,
         )
 
 
@@ -155,6 +163,8 @@ def draw_detections(
             parts.append(det.class_name)
         if show_conf:
             parts.append(f"{det.confidence * 100:.1f}%")
+        if det.reliability_label is not None:
+            parts.append(f"({det.reliability_label})")
         if det.track_id is not None:
             parts.insert(0, f"#{det.track_id}")
 

@@ -80,6 +80,16 @@ class VisionPipeline:
             enable_contrast=self.config.features.enable_contrast,
         )
 
+        # Initialize Reliability ANN
+        from ann.inference import ReliabilityInference
+        self.reliability_ann = ReliabilityInference(
+            enabled=self.config.ann.enabled,
+            model_path=self.config.ann.model_path,
+            scaler_path=self.config.ann.scaler_path,
+            confidence_threshold=self.config.ann.confidence_threshold,
+            device=self.config.ann.device,
+        )
+
         # Camera adapter (lazy-opened if streaming)
         self.camera = camera or CameraAdapter(
             source=self.config.camera.source,
@@ -119,10 +129,14 @@ class VisionPipeline:
         detections = self.detector.detect(frame_obj)
         t_detect = time.perf_counter()
 
-        # 2. Feature Building
+        # 2. Feature Building & Reliability Estimation
         features: List[DetectionFeatures] = []
         if extract_features and detections:
             features = self.feature_builder.extract_all(frame_obj, detections)
+            for i, feat in enumerate(features):
+                rel_res = self.reliability_ann.predict(feat)
+                detections[i].reliability_score = rel_res.score
+                detections[i].reliability_label = rel_res.label
 
         # 3. Annotation
         annotated: Optional[np.ndarray] = None

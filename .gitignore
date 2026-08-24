@@ -21,6 +21,7 @@ env/
 *.pt
 *.pth
 *.onnx
+*.pkl
 
 # Data
 data/raw/
