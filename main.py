@@ -91,6 +91,29 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to CSV file where extracted detection features should be recorded (e.g., 'data/features.csv').",
     )
+    parser.add_argument(
+        "--no-ann",
+        action="store_true",
+        help="Disable the Reliability ANN module (force YOLO-only fallback mode).",
+    )
+    parser.add_argument(
+        "--ann-model",
+        type=str,
+        default="models/reliability_ann.pth",
+        help="Path to trained Reliability ANN model weights (.pth). Default: 'models/reliability_ann.pth'",
+    )
+    parser.add_argument(
+        "--ann-scaler",
+        type=str,
+        default="models/scaler.pkl",
+        help="Path to fitted scaler metadata (.pkl). Default: 'models/scaler.pkl'",
+    )
+    parser.add_argument(
+        "--ann-thresh",
+        type=float,
+        default=0.5,
+        help="Decision threshold for reliable/unreliable label. Default: 0.5",
+    )
     return parser.parse_args()
 
 
@@ -127,6 +150,7 @@ def draw_hud(
     num_detections: int,
     model_name: str,
     latency_ms: float,
+    ann_version: str = "disabled",
 ) -> np.ndarray:
     """Draws a sleek Head-Up-Display (HUD) overlay on the top edge of the frame."""
     hud_h = 36
@@ -137,7 +161,7 @@ def draw_hud(
     image[:hud_h, :] = cv2.addWeighted(hud_bg, 0.35, dark_overlay, 0.65, 0).astype(np.uint8)
 
     # Info string
-    hud_text = f"AURA M2  |  FPS: {fps:5.1f}  |  Latency: {latency_ms:4.1f}ms  |  Detections: {num_detections:2d}  |  Model: {model_name}"
+    hud_text = f"AURA M2/M4  |  FPS: {fps:5.1f}  |  Latency: {latency_ms:4.1f}ms  |  Detections: {num_detections:2d}  |  Model: {model_name}  |  ANN: {ann_version}"
     cv2.putText(
         image,
         hud_text,
@@ -162,8 +186,12 @@ def run_pipeline(
     benchmark: bool = False,
     max_frames: Optional[int] = None,
     dataset_csv: Optional[str] = None,
+    no_ann: bool = False,
+    ann_model: str = "models/reliability_ann.pth",
+    ann_scaler: str = "models/scaler.pkl",
+    ann_thresh: float = 0.5,
 ) -> int:
-    """Main execution loop for AURA Milestone 2."""
+    """Main execution loop for AURA Milestone 2 and 4."""
     source_target = int(source_val) if source_val.isdigit() else source_val
 
     # Initialize ObjectDetector and FeatureBuilder
@@ -179,6 +207,18 @@ def run_pipeline(
         return 1
 
     feature_builder = FeatureBuilder()
+    
+    # Initialize Reliability ANN
+    from ann.inference import ReliabilityInference
+    logger.info("Initializing Reliability ANN...")
+    reliability_ann = ReliabilityInference(
+        enabled=not no_ann,
+        model_path=ann_model,
+        scaler_path=ann_scaler,
+        confidence_threshold=ann_thresh,
+        device=device,
+    )
+
     collector = DatasetCollector() if dataset_csv else None
 
     # Initialize CameraAdapter
@@ -234,9 +274,14 @@ def run_pipeline(
 
             t_cap = time.perf_counter()
 
-            # 2. Run Object Detection & Feature Extraction
+            # 2. Run Object Detection, Feature Extraction & Reliability Estimation
             detections = detector.detect(frame)
             features = feature_builder.extract_all(frame, detections) if detections else []
+            if features:
+                for i, feat in enumerate(features):
+                    rel_res = reliability_ann.predict(feat)
+                    detections[i].reliability_score = rel_res.score
+                    detections[i].reliability_label = rel_res.label
             t_infer = time.perf_counter()
             infer_latency_ms = (t_infer - t_cap) * 1000.0
             total_latency += infer_latency_ms
@@ -258,6 +303,7 @@ def run_pipeline(
                 num_detections=len(detections),
                 model_name=model_name,
                 latency_ms=infer_latency_ms,
+                ann_version=reliability_ann.model_version,
             )
 
             frame_count += 1
@@ -332,6 +378,10 @@ def main():
         benchmark=args.benchmark,
         max_frames=args.frames if args.frames is not None else (50 if args.benchmark else None),
         dataset_csv=args.collect_dataset,
+        no_ann=args.no_ann,
+        ann_model=args.ann_model,
+        ann_scaler=args.ann_scaler,
+        ann_thresh=args.ann_thresh,
     )
 
 

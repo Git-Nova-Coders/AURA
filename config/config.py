@@ -51,9 +51,22 @@ class DisplayConfig:
 
 
 @dataclass
+class AnnConfig:
+    """Configuration for Reliability ANN."""
+    enabled: bool = True
+    model_path: str = "models/reliability_ann.pth"
+    scaler_path: str = "models/scaler.pkl"
+    confidence_threshold: float = 0.5  # decision threshold for reliable vs unreliable
+    device: str = "cpu"  # 'cpu', 'cuda', 'auto'
+    model_version: str = "ann_v1"
+
+
+@dataclass
 class AuraConfig:
     """Master configuration for AURA application."""
     camera: CameraConfig = field(default_factory=CameraConfig)
     vision: VisionConfig = field(default_factory=VisionConfig)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
+    ann: AnnConfig = field(default_factory=AnnConfig)
+
