@@ -29,12 +29,23 @@ class VisionConfig:
 
 
 @dataclass
+class FeaturesConfig:
+    """Configuration for visual feature extraction (Feature Builder)."""
+    enable_blur: bool = True
+    enable_brightness: bool = True
+    enable_contrast: bool = True
+    normalize_quality: bool = True
+    num_classes: int = 80
+
+
+@dataclass
 class DisplayConfig:
     """Configuration for visual rendering and UI display."""
-    window_name: str = "AURA - Real-Time Visual Assistant (Milestone 1)"
+    window_name: str = "AURA - Real-Time Visual Assistant"
     show_fps: bool = True
     show_labels: bool = True
     show_conf: bool = True
+    show_features: bool = False
     box_thickness: int = 2
     font_scale: float = 0.6
 
@@ -44,4 +55,5 @@ class AuraConfig:
     """Master configuration for AURA application."""
     camera: CameraConfig = field(default_factory=CameraConfig)
     vision: VisionConfig = field(default_factory=VisionConfig)
+    features: FeaturesConfig = field(default_factory=FeaturesConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
