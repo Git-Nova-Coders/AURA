@@ -1,6 +1,7 @@
 """
 AURA Object Tracking Subsystem (Milestone 5)
-Associates detections across consecutive frames to maintain persistent track IDs and motion trajectories.
+Associates detections across consecutive frames to maintain persistent track IDs,
+smooth bounding box trajectories (anti-jitter EMA), and motion metrics.
 """
 
 import logging
@@ -39,7 +40,7 @@ def compute_iou(box1: List[float], box2: List[float]) -> float:
 @dataclass
 class TrackedObject:
     """
-    State of a single persistent tracked object across time.
+    State of a single persistent tracked object across time with temporal smoothing.
     """
     track_id: int
     class_id: int
@@ -51,6 +52,7 @@ class TrackedObject:
     hits: int = 1                    # Number of frames successfully matched
     time_since_update: int = 0       # Frames elapsed since last detection match
     velocity: Tuple[float, float] = (0.0, 0.0)  # (dx, dy) in pixels per frame
+    smooth_factor: float = 0.65      # EMA weight for new frame (0.65 = 65% new, 35% history)
 
     @property
     def center(self) -> Tuple[float, float]:
@@ -67,9 +69,22 @@ class TrackedObject:
         return float(np.sqrt(self.velocity[0] ** 2 + self.velocity[1] ** 2))
 
     def update(self, detection: Detection) -> None:
-        """Updates the track state with a newly matched Detection."""
+        """
+        Updates the track state with a newly matched Detection and applies Anti-Jitter EMA smoothing.
+        """
         old_cx, old_cy = self.center
-        self.bbox = [float(c) for c in detection.bbox]
+        raw_box = [float(c) for c in detection.bbox]
+
+        # Apply Exponential Moving Average (EMA) smoothing to prevent box jitter
+        if self.hits >= 1 and len(self.bbox) == 4:
+            alpha = self.smooth_factor
+            self.bbox = [
+                alpha * raw_box[j] + (1.0 - alpha) * self.bbox[j]
+                for j in range(4)
+            ]
+        else:
+            self.bbox = raw_box
+
         self.confidence = float(detection.confidence)
         new_cx, new_cy = self.center
 
@@ -106,25 +121,21 @@ class TrackedObject:
 
 class ObjectTracker:
     """
-    Multi-Object Tracker based on Spatial IoU and Centroid Association.
+    Multi-Object Tracker based on Spatial IoU and Centroid Association with Anti-Jitter smoothing.
     Assigns persistent track_id integers across consecutive frames.
     """
 
     def __init__(
         self,
         max_age: int = 30,
-        min_hits: int = 1,
+        min_hits: int = 2,
         iou_threshold: float = 0.3,
+        smooth_factor: float = 0.65,
     ):
-        """
-        Args:
-            max_age: Number of consecutive missed frames before a track is deleted.
-            min_hits: Minimum detections before a track is considered confirmed.
-            iou_threshold: Minimum IoU required to associate a detection with an existing track.
-        """
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
+        self.smooth_factor = smooth_factor
         self._tracks: List[TrackedObject] = []
         self._next_id: int = 1
 
@@ -145,13 +156,13 @@ class ObjectTracker:
     def update(self, detections: List[Detection]) -> List[Detection]:
         """
         Updates the tracker with detections from the current frame.
-        Enriches and returns the Detection list with assigned track_id attributes.
+        Enriches Detection objects with persistent track_id and smoothed bounding boxes.
         
         Args:
             detections: List of Detection objects from current frame.
             
         Returns:
-            List[Detection]: Detection objects with updated `track_id`.
+            List[Detection]: Detection objects with updated `track_id` and smoothed `bbox`.
         """
         if not detections:
             # Advance all existing tracks as missed
@@ -174,6 +185,7 @@ class ObjectTracker:
                     age=1,
                     hits=1,
                     time_since_update=0,
+                    smooth_factor=self.smooth_factor,
                 )
                 self._tracks.append(track)
                 det.track_id = self._next_id
@@ -217,6 +229,8 @@ class ObjectTracker:
                 matched_dets.add(d_idx)
                 self._tracks[t_idx].update(detections[d_idx])
                 detections[d_idx].track_id = self._tracks[t_idx].track_id
+                # Apply smoothed bounding box back to detection
+                detections[d_idx].bbox = list(self._tracks[t_idx].bbox)
 
         # Update unmatched tracks
         for t_idx, track in enumerate(self._tracks):
@@ -236,6 +250,7 @@ class ObjectTracker:
                     age=1,
                     hits=1,
                     time_since_update=0,
+                    smooth_factor=self.smooth_factor,
                 )
                 self._tracks.append(new_track)
                 det.track_id = self._next_id
