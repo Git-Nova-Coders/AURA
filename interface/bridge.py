@@ -231,40 +231,90 @@ class AuraBridge:
             self._use_synthetic = True
 
     def _create_synthetic_frame(self, idx: int) -> Tuple[Frame, List[Detection], List[TextDetection]]:
-        """Generates a synthetic test frame with moving objects, bounding boxes, and visible text."""
+        """
+        Generates a rich, futuristic visual animation simulating object detection
+        when the physical camera is off, unavailable, or in simulation mode.
+        """
         img = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
-        # Gradient background
-        for y in range(self.height):
-            img[y, :, 0] = int(20 + 40 * (y / self.height))
-            img[y, :, 1] = int(20 + 20 * (y / self.height))
-            img[y, :, 2] = int(40 + 60 * (y / self.height))
+        # 1. Futuristic dark cyber background with subtle grid
+        for y in range(0, self.height, 40):
+            cv2.line(img, (0, y), (self.width, y), (28, 22, 18), 1)
+        for x in range(0, self.width, 40):
+            cv2.line(img, (x, 0), (x, self.height), (28, 22, 18), 1)
 
-        # Moving person-like shape
-        cx = int(200 + 100 * np.sin(idx * 0.05))
-        cv2.rectangle(img, (cx - 40, 100), (cx + 40, 340), (60, 180, 75), -1)
-        cv2.circle(img, (cx, 80), 30, (60, 180, 75), -1)
+        # 2. Moving animated scanline (green-cyan glow)
+        scan_y = int((idx * 4) % self.height)
+        cv2.line(img, (0, scan_y), (self.width, scan_y), (120, 240, 200), 1)
+        if scan_y > 2:
+            cv2.line(img, (0, scan_y - 2), (self.width, scan_y - 2), (40, 100, 70), 1)
 
-        # Moving notebook
-        nx = int(420 + 50 * np.cos(idx * 0.03))
-        cv2.rectangle(img, (nx - 60, 260), (nx + 60, 380), (180, 100, 40), -1)
-        cv2.putText(
-            img, "AURA MANUAL", (nx - 50, 325),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1,
-        )
+        # 3. Simulated Moving Person (Silhouette with futuristic aesthetic)
+        cx = int(180 + 90 * np.sin(idx * 0.04))
+        cy = int(220 + 8 * np.cos(idx * 0.08))
+        # Torso & body
+        cv2.rectangle(img, (cx - 32, cy - 70), (cx + 32, cy + 90), (45, 160, 85), -1)
+        cv2.rectangle(img, (cx - 32, cy - 70), (cx + 32, cy + 90), (0, 240, 150), 2)
+        # Head
+        cv2.circle(img, (cx, cy - 95), 24, (45, 160, 85), -1)
+        cv2.circle(img, (cx, cy - 95), 24, (0, 240, 150), 2)
+        # Visor
+        cv2.rectangle(img, (cx - 14, cy - 100), (cx + 14, cy - 90), (255, 240, 0), -1)
+        # Legs
+        cv2.line(img, (cx - 18, cy + 90), (cx - 22, cy + 150), (45, 160, 85), 8)
+        cv2.line(img, (cx + 18, cy + 90), (cx + 22, cy + 150), (45, 160, 85), 8)
+
+        # 4. Simulated Workstation Desk & Laptop
+        desk_y = 360
+        cv2.line(img, (240, desk_y), (620, desk_y), (80, 80, 80), 2)
+
+        # Laptop screen & keyboard base
+        lx, ly = 370, 310
+        cv2.rectangle(img, (lx - 55, ly - 45), (lx + 55, ly + 25), (40, 35, 30), -1)
+        cv2.rectangle(img, (lx - 55, ly - 45), (lx + 55, ly + 25), (240, 200, 0), 2)
+        # Glowing laptop screen
+        cv2.rectangle(img, (lx - 48, ly - 40), (lx + 48, ly + 18), (140, 90, 20), -1)
+        cv2.putText(img, "AURA OS", (lx - 35, ly - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+        # Laptop base
+        pts_base = np.array([[lx - 65, ly + 40], [lx + 65, ly + 40], [lx + 55, ly + 25], [lx - 55, ly + 25]], np.int32)
+        cv2.fillPoly(img, [pts_base], (60, 55, 50))
+        cv2.polylines(img, [pts_base], True, (240, 200, 0), 1)
+
+        # 5. Simulated Notebook with dynamic position
+        nx = int(510 + 20 * np.cos(idx * 0.02))
+        ny = 325
+        cv2.rectangle(img, (nx - 38, ny - 28), (nx + 38, ny + 32), (140, 60, 30), -1)
+        cv2.rectangle(img, (nx - 38, ny - 28), (nx + 38, ny + 32), (220, 120, 0), 2)
+        cv2.putText(img, "MANUAL", (nx - 30, ny + 6), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1)
+
+        # 6. Water Bottle / Cup
+        bx, by = 275, 330
+        cv2.rectangle(img, (bx - 12, by - 25), (bx + 12, by + 25), (160, 110, 40), -1)
+        cv2.rectangle(img, (bx - 12, by - 25), (bx + 12, by + 25), (255, 180, 0), 1)
+        cv2.rectangle(img, (bx - 6, by - 33), (bx + 6, by - 25), (100, 80, 80), -1)
+
+        # 7. Simulation HUD watermark
+        cv2.putText(img, "CAMERA OFF // SIMULATION ENGINE ACTIVE", (16, 26),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (0, 240, 255), 1)
 
         synth_frame = Frame(
             image=img,
             timestamp=time.time(),
             source_id="synthetic",
         )
+
         synth_dets = [
-            Detection(class_id=0, class_name="person", confidence=0.92, bbox=[cx - 40.0, 50.0, cx + 40.0, 340.0]),
-            Detection(class_id=1, class_name="notebook", confidence=0.88, bbox=[nx - 60.0, 260.0, nx + 60.0, 380.0]),
+            Detection(class_id=0, class_name="person", confidence=0.95, bbox=[float(cx - 45), float(cy - 125), float(cx + 45), float(cy + 155)]),
+            Detection(class_id=1, class_name="laptop", confidence=0.91, bbox=[float(lx - 68), float(ly - 50), float(lx + 68), float(ly + 45)]),
+            Detection(class_id=2, class_name="notebook", confidence=0.88, bbox=[float(nx - 45), float(ny - 35), float(nx + 45), float(ny + 40)]),
+            Detection(class_id=3, class_name="bottle", confidence=0.84, bbox=[float(bx - 15), float(by - 35), float(bx + 15), float(by + 30)]),
         ]
+
         synth_texts = [
-            TextDetection(text="AURA MANUAL", confidence=0.95, bbox=[nx - 50, 310, nx + 50, 330]),
+            TextDetection(text="AURA OS", confidence=0.96, bbox=[lx - 35, ly - 20, lx + 35, ly + 5]),
+            TextDetection(text="MANUAL", confidence=0.94, bbox=[nx - 30, ny - 5, nx + 30, ny + 15]),
         ]
+
         return synth_frame, synth_dets, synth_texts
 
     def _pipeline_loop(self) -> None:
@@ -312,15 +362,23 @@ class AuraBridge:
                 self._last_ocr_texts = synth_texts
                 infer_latency_ms = 15.0
             else:
-                frame = self._camera.read()
+                try:
+                    frame = self._camera.read()
+                except Exception as e:
+                    logger.warning(f"Camera read error: {e}. Falling back to simulation.")
+                    frame = None
+
                 if frame is None:
-                    logger.info("Camera stream ended.")
-                    break
-                with frame_lock:
-                    latest_camera_frame = frame
-                with det_lock:
-                    detections = list(current_camera_dets)
-                infer_latency_ms = last_infer_latency
+                    # Seamless animation fallback when camera is off or unavailable
+                    frame, detections, synth_texts = self._create_synthetic_frame(frame_count)
+                    self._last_ocr_texts = synth_texts
+                    infer_latency_ms = 15.0
+                else:
+                    with frame_lock:
+                        latest_camera_frame = frame
+                    with det_lock:
+                        detections = list(current_camera_dets)
+                    infer_latency_ms = last_infer_latency
 
             # 3. Track
             tracks_map: Dict[int, Any] = {}
