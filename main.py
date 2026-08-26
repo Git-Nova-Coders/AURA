@@ -43,8 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="yolo11m.pt",
-        help="YOLO model path or identifier (e.g., 'yolo11m.pt', 'yolo11s.pt', 'yolo11n.pt'). Default: 'yolo11m.pt'",
+        default="yolo11s.pt",
+        help="YOLO model path or identifier (e.g., 'yolo11s.pt', 'yolo11m.pt', 'yolo11n.pt'). Default: 'yolo11s.pt'",
     )
     parser.add_argument(
         "--conf",
