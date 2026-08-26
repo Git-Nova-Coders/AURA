@@ -18,6 +18,17 @@ from .conversation import (
     ConversationResponse,
     ConversationEngine,
 )
+from .memory import (
+    EpisodicEvent,
+    EpisodicMemory,
+)
+from .llm import (
+    BaseLLMProvider,
+    OfflineReasoningProvider,
+    GeminiMultimodalProvider,
+    OllamaProvider,
+    create_llm_provider,
+)
 
 __all__ = [
     "ObjectEntity",
@@ -29,4 +40,11 @@ __all__ = [
     "IntentClassifier",
     "ConversationResponse",
     "ConversationEngine",
+    "EpisodicEvent",
+    "EpisodicMemory",
+    "BaseLLMProvider",
+    "OfflineReasoningProvider",
+    "GeminiMultimodalProvider",
+    "OllamaProvider",
+    "create_llm_provider",
 ]
