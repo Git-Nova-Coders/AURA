@@ -332,12 +332,13 @@ class ContextManager:
                     return e
 
         # 2. Specific spatial reference: "on the left", "in the center", "on the right"
+        import re
         spatial_keywords = ["left", "right", "center", "top", "bottom", "middle"]
-        matched_spatial = [kw for kw in spatial_keywords if kw in q]
+        matched_spatial = [kw for kw in spatial_keywords if re.search(r"\b" + kw + r"\b", q)]
 
         # 3. Class name + spatial reference match: "the cup on the left"
         for e in entities:
-            if e.class_name.lower() in q:
+            if re.search(r"\b" + re.escape(e.class_name.lower()) + r"\b", q) or e.class_name.lower() in q:
                 if matched_spatial:
                     for sp in matched_spatial:
                         if sp in e.spatial_pos:

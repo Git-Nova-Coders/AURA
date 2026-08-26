@@ -1,9 +1,10 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
-Milestone 5: Multi-Object Tracking & Optical Character Recognition (OCR) Pipeline
-(Camera -> OpenCV -> Decoupled Real-Time Threading -> YOLO Detection -> Tracker -> OCR -> Reliability ANN)
+Milestone 7: Multimodal Visual Intelligence Assistant
+(Camera -> YOLO Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Knowledge Retrieval -> Conversational Reasoning -> Voice STT/TTS)
 
-Entry point for running live detection, tracking, OCR, feature extraction, dataset collection, or benchmarking.
+Entry point for running live detection, tracking, OCR, feature extraction,
+knowledge lookups, natural-language visual reasoning, and voice interaction.
 """
 
 import sys
@@ -22,6 +23,13 @@ from vision.features import FeatureBuilder
 from vision.dataset_collector import DatasetCollector
 from ocr.engine import OCREngine, TextDetection, draw_text_annotations
 from ann.inference import ReliabilityInference
+from knowledge.retriever import KnowledgeRetriever
+from knowledge.sources import KnowledgeItem
+from brain.context import ContextManager, SceneContext
+from brain.conversation import ConversationEngine, ConversationResponse
+from voice.engine import VoiceAssistant
+from voice.tts import TextToSpeech
+from voice.stt import SpeechToText
 
 # Setup logging
 logging.basicConfig(
@@ -34,19 +42,19 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AURA Visual Intelligence Assistant - Milestone 5 (Tracking & OCR)"
+        description="AURA Visual Intelligence Assistant - Milestones 6 & 7 (Intelligence & Voice)"
     )
     parser.add_argument(
         "--source",
         type=str,
         default="0",
-        help="Camera device index (e.g., '0') or path to video/image file. Default: '0'",
+        help="Camera device index (e.g., '0') or path to video/image file or 'synthetic'. Default: '0'",
     )
     parser.add_argument(
         "--model",
         type=str,
         default="yolov8m-worldv2.pt",
-        help="YOLO model path (e.g., 'yolov8m-worldv2.pt', 'yolov8s-worldv2.pt', 'yolo11s.pt'). Default: 'yolov8m-worldv2.pt'",
+        help="YOLO model path. Default: 'yolov8m-worldv2.pt'",
     )
     parser.add_argument(
         "--conf",
@@ -58,7 +66,7 @@ def parse_args() -> argparse.Namespace:
         "--classes",
         type=str,
         default=None,
-        help="Comma-separated custom class names for YOLO-World (e.g. 'person,laptop,notebook,pen,smartphone'). Default: AURA indoor vocabulary",
+        help="Comma-separated custom class names for YOLO-World (e.g. 'person,laptop,notebook,pen,smartphone').",
     )
     parser.add_argument(
         "--device",
@@ -141,9 +149,30 @@ def parse_args() -> argparse.Namespace:
         help="Decision threshold for reliable/unreliable label. Default: 0.5",
     )
     parser.add_argument(
+        "--voice",
+        action="store_true",
+        help="Enable Voice Assistant (Speech-To-Text & Text-To-Speech).",
+    )
+    parser.add_argument(
+        "--no-tts",
+        action="store_true",
+        help="Disable Text-To-Speech audio playback.",
+    )
+    parser.add_argument(
+        "--query",
+        type=str,
+        default=None,
+        help="Run a one-shot natural-language visual query upon initialization.",
+    )
+    parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Enable interactive chat prompt loop in console alongside visual assistant.",
+    )
+    parser.add_argument(
         "--sync",
         action="store_true",
-        help="Force synchronous single-threaded execution (disables decoupled real-time preview thread).",
+        help="Force synchronous single-threaded execution.",
     )
     return parser.parse_args()
 
@@ -151,7 +180,7 @@ def parse_args() -> argparse.Namespace:
 def create_synthetic_frame(frame_idx: int = 0) -> Frame:
     """Generates a synthetic test frame with moving shapes and visible text for benchmarking."""
     img = np.zeros((480, 640, 3), dtype=np.uint8)
-    
+
     # Gradient background
     for y in range(480):
         img[y, :, 0] = int(20 + 40 * (y / 480))
@@ -168,7 +197,7 @@ def create_synthetic_frame(frame_idx: int = 0) -> Frame:
     cv2.rectangle(img, (nx - 60, 260), (nx + 60, 380), (180, 100, 40), -1)
     cv2.putText(img, "AURA NOTEBOOK", (nx - 55, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
 
-    return Frame(image=img, timestamp=time.time(), frame_id=frame_idx, source_id="synthetic")
+    return Frame(image=img, timestamp=time.time(), source_id="synthetic")
 
 
 def draw_hud(
@@ -181,33 +210,60 @@ def draw_hud(
     active_tracks: int = 0,
     ocr_texts_count: int = -1,
     ann_version: Optional[str] = None,
+    voice_status: str = "IDLE",
+    last_subtitle: Optional[str] = None,
 ) -> np.ndarray:
-    """Renders a sleek HUD status bar over the frame."""
+    """Renders a sleek top HUD status bar and bottom subtitle banner over the frame."""
     h, w = image.shape[:2]
-    # Semi-transparent top banner
+
+    # 1. Top status banner
     overlay = image.copy()
     cv2.rectangle(overlay, (0, 0), (w, 36), (20, 20, 20), cv2.FILLED)
-    cv2.addWeighted(overlay, 0.75, image, 0.25, 0, image)
 
     track_str = f"Tracks: {active_tracks}" if tracking_enabled else "Tracking: OFF"
     ocr_str = f" | OCR: {ocr_texts_count}" if ocr_texts_count >= 0 else ""
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
+    voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
 
     hud_text = (
-        f"AURA v0.5 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{ocr_str}{ann_str}"
+        f"AURA v0.7 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
+        f"Detections: {num_detections} | {track_str}{ocr_str}{ann_str}{voice_badge}"
     )
 
+    # 2. Bottom subtitle banner if there is active speech or response
+    if last_subtitle:
+        banner_h = 44
+        cv2.rectangle(overlay, (0, h - banner_h), (w, h), (15, 15, 15), cv2.FILLED)
+
+    cv2.addWeighted(overlay, 0.78, image, 0.22, 0, image)
+
+    # Render top text
     cv2.putText(
         image,
         hud_text,
         (10, 24),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.48,
+        0.44,
         (0, 255, 180),
         1,
         cv2.LINE_AA,
     )
+
+    # Render bottom subtitle
+    if last_subtitle:
+        # Truncate subtitle for display if too long
+        display_sub = last_subtitle[:100] + ("..." if len(last_subtitle) > 100 else "")
+        cv2.putText(
+            image,
+            f"AURA: {display_sub}",
+            (15, h - 16),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
     return image
 
 
@@ -231,12 +287,16 @@ def run_pipeline(
     ann_thresh: float = 0.5,
     custom_classes: Optional[str] = None,
     sync_mode: bool = False,
+    enable_voice: bool = False,
+    enable_tts: bool = True,
+    one_shot_query: Optional[str] = None,
+    enable_chat_loop: bool = False,
 ) -> int:
-    """Main execution loop for AURA Milestone 5."""
+    """Main execution loop for AURA Milestones 6 & 7."""
     source_target = int(source_val) if source_val.isdigit() else source_val
     classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
 
-    # Initialize ObjectDetector
+    # 1. Initialize ObjectDetector
     logger.info("Initializing ObjectDetector...")
     try:
         detector = ObjectDetector(
@@ -249,13 +309,13 @@ def run_pipeline(
         logger.error(f"Detector initialization failed: {e}")
         return 1
 
-    # Initialize Tracker
+    # 2. Initialize Tracker
     tracker: Optional[ObjectTracker] = None
     if not no_track:
         logger.info("Initializing Multi-Object Tracker...")
         tracker = ObjectTracker(max_age=30, min_hits=1, iou_threshold=0.3, smooth_factor=0.65)
 
-    # Initialize OCR Engine
+    # 3. Initialize OCR Engine
     ocr_engine: Optional[OCREngine] = None
     if enable_ocr:
         logger.info("Initializing OCR Engine...")
@@ -264,10 +324,10 @@ def run_pipeline(
         except Exception as e:
             logger.warning(f"OCR Engine failed to initialize: {e}. Running without OCR.")
 
-    # Initialize Feature Builder
+    # 4. Initialize Feature Builder
     feature_builder = FeatureBuilder()
 
-    # Initialize Reliability ANN
+    # 5. Initialize Reliability ANN
     logger.info("Initializing Reliability ANN...")
     reliability_ann = ReliabilityInference(
         enabled=not no_ann,
@@ -277,13 +337,42 @@ def run_pipeline(
         device=device,
     )
 
+    # 6. Initialize Milestone 6: Context Manager, Knowledge Retriever, Conversation Engine
+    logger.info("Initializing Context Manager & Knowledge Retriever (Milestone 6)...")
+    context_manager = ContextManager()
+    knowledge_retriever = KnowledgeRetriever(enable_curated=True, enable_wikipedia=True)
+    conversation_engine = ConversationEngine(
+        context_manager=context_manager,
+        knowledge_retriever=knowledge_retriever,
+    )
+
+    # Subtitle state for HUD display
+    current_subtitle = ""
+    subtitle_lock = threading.Lock()
+
+    def update_subtitle(text: str):
+        nonlocal current_subtitle
+        with subtitle_lock:
+            current_subtitle = text
+
+    # 7. Initialize Milestone 7: Voice Assistant
+    voice_assistant: Optional[VoiceAssistant] = None
+    if enable_voice or enable_tts:
+        logger.info("Initializing Voice Assistant (Milestone 7)...")
+        voice_assistant = VoiceAssistant(
+            conversation_engine=conversation_engine,
+            enable_tts=enable_tts,
+            enable_stt=enable_voice,
+            on_response=lambda resp: update_subtitle(resp.response_text),
+        )
+
     collector = DatasetCollector() if dataset_csv else None
 
     # Initialize CameraAdapter
     use_synthetic = False
     camera: Optional[CameraAdapter] = None
 
-    if source_val.lower() == "synthetic":
+    if benchmark or source_val.lower() == "synthetic":
         use_synthetic = True
         logger.info("Using synthetic frame generator mode.")
     else:
@@ -304,7 +393,7 @@ def run_pipeline(
                 logger.info("Tip: Pass '--source synthetic' or '--headless --benchmark' to run without camera.")
                 return 1
 
-    window_name = "AURA - High-Precision Assistant"
+    window_name = "AURA - Visual Intelligence Assistant"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
@@ -319,7 +408,7 @@ def run_pipeline(
 
     # --- Decoupled Real-Time Inference Threading Setup ---
     use_async = (not sync_mode) and (not use_synthetic) and (not benchmark)
-    
+
     current_detections: List[Detection] = []
     det_lock = threading.Lock()
     latest_camera_frame: Optional[Frame] = None
@@ -343,14 +432,13 @@ def run_pipeline(
                     last_infer_latency = (t1_inf - t0_inf) * 1000.0
             time.sleep(0.005)
 
-    infer_thread = None
     if use_async:
-        logger.info("Starting Decoupled Real-Time Async Vision Worker (30+ FPS Preview)...")
+        logger.info("Starting Decoupled Real-Time Async Vision Worker...")
         infer_thread = threading.Thread(target=inference_worker, daemon=True)
         infer_thread.start()
 
-    logger.info("Starting visual processing loop. Press 'q' or ESC in window to exit...")
-    logger.info("Controls: 'q'=Quit, 's'=Save Snapshot, 'c'=Print Detections, 'f'=Print Features, 't'=Toggle Tracker, 'o'=Scan OCR")
+    logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
+    logger.info("Controls: 'v'=Voice Push-to-Talk, 'c'=Console Query, 'k'=Object Knowledge, 'i'=Scene Info, 'm'=Memory, 't'=Toggle Tracker, 'o'=Scan OCR")
 
     try:
         while True:
@@ -396,25 +484,48 @@ def run_pipeline(
                     detections[i].reliability_label = rel_res.label
 
             # 5. Periodic / Strided OCR
+            object_texts = {}
             if ocr_engine is not None and (frame_count % max(1, ocr_stride) == 0):
                 last_ocr_texts = ocr_engine.extract_text(frame)
+                object_texts = ocr_engine.extract_text_for_detections(frame.image, detections)
 
-            # 6. Record to Dataset if requested
+            # 6. Update Context Manager (Milestone 6)
+            scene_context = context_manager.update(
+                detections=detections,
+                text_detections=last_ocr_texts,
+                object_texts=object_texts,
+                frame_shape=frame.shape[:2],
+            )
+
+            # One-shot query handling if supplied via CLI
+            if one_shot_query and frame_count == 3:
+                logger.info(f"Executing one-shot query: '{one_shot_query}'")
+                resp = conversation_engine.respond(one_shot_query)
+                logger.info(f"[AURA Answer] {resp.response_text}")
+                update_subtitle(resp.response_text)
+                if voice_assistant and enable_tts:
+                    voice_assistant.tts.speak(resp.response_text)
+
+            # 7. Record to Dataset if requested
             if collector is not None and features:
                 collector.add_samples(features)
 
-            # 7. Calculate Smooth FPS
+            # 8. Calculate Smooth FPS
             loop_time = time.perf_counter() - t0
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = current_fps if frame_count == 0 else (alpha * current_fps + (1 - alpha) * fps_ema)
 
-            # 8. Render Annotations & HUD
+            # 9. Render Annotations & Enhanced HUD
             annotated_frame = detector.annotate(frame, detections)
             if ocr_engine is not None and last_ocr_texts:
                 annotated_frame = draw_text_annotations(annotated_frame, last_ocr_texts)
 
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
             ocr_count = len(last_ocr_texts) if ocr_engine is not None else -1
+            v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
+
+            with subtitle_lock:
+                sub_text = current_subtitle
 
             annotated_frame = draw_hud(
                 annotated_frame,
@@ -426,6 +537,8 @@ def run_pipeline(
                 active_tracks=active_tracks_count,
                 ocr_texts_count=ocr_count,
                 ann_version=reliability_ann.model_version,
+                voice_status=v_status,
+                last_subtitle=sub_text,
             )
 
             frame_count += 1
@@ -435,21 +548,55 @@ def run_pipeline(
                     f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)} | Tracks: {active_tracks_count} | Texts: {max(0, ocr_count)}"
                 )
 
-            # 9. Display GUI if not headless
+            # 10. Display GUI if not headless
             if not headless:
                 cv2.imshow(window_name, annotated_frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (27, ord('q'), ord('Q')):
                     logger.info("Exit key pressed by user.")
                     break
+                elif key in (ord('v'), ord('V')):
+                    if voice_assistant:
+                        logger.info("Triggering Voice Push-To-Talk...")
+                        voice_assistant.trigger_push_to_talk()
+                    else:
+                        logger.info("Voice assistant is not enabled. Pass '--voice' to enable.")
                 elif key in (ord('c'), ord('C')):
-                    logger.info(f"Structured detections at frame {frame_count}:")
-                    for d in detections:
-                        print(" ", d.to_dict())
-                elif key in (ord('f'), ord('F')):
-                    logger.info(f"Extracted features at frame {frame_count}:")
-                    for feat in features:
-                        print(" ", feat.to_dict())
+                    # Console query
+                    print("\n[AURA Prompt] Enter query about the visual scene: ", end="", flush=True)
+                    user_q = input().strip()
+                    if user_q:
+                        if voice_assistant:
+                            resp = voice_assistant.process_text_query(user_q, speak_output=enable_tts)
+                        else:
+                            resp = conversation_engine.respond(user_q)
+                        print(f"[AURA Answer] {resp.response_text}\n")
+                        update_subtitle(resp.response_text)
+                elif key in (ord('k'), ord('K')):
+                    # Object Knowledge Lookup
+                    if detections:
+                        target = detections[0]
+                        k_item = knowledge_retriever.retrieve_for_detection(target)
+                        if k_item:
+                            print(f"\n[Knowledge: {k_item.title}]\nCategory: {k_item.category}\nSummary: {k_item.summary}\nSource: {k_item.source}\n")
+                            update_subtitle(f"{k_item.title}: {k_item.summary}")
+                            if voice_assistant and enable_tts:
+                                voice_assistant.tts.speak(k_item.summary)
+                        else:
+                            print(f"\n[Knowledge] No encyclopedia facts found for '{target.class_name}'.\n")
+                    else:
+                        print("\n[Knowledge] No objects detected in current view.\n")
+                elif key in (ord('i'), ord('I')):
+                    print(f"\n[Scene Context Summary]\n{scene_context.summary()}\n")
+                    for e in scene_context.entities:
+                        print(f" - {e.describe()}")
+                    print()
+                elif key in (ord('m'), ord('M')):
+                    turns = context_manager.get_recent_turns(5)
+                    print("\n[Conversation Memory]")
+                    for turn in turns:
+                        print(f" {turn['role'].upper()}: {turn['text']}")
+                    print()
                 elif key in (ord('t'), ord('T')):
                     tracking_active = not tracking_active
                     logger.info(f"Tracking toggled: {'ENABLED' if tracking_active else 'DISABLED'}")
@@ -475,12 +622,14 @@ def run_pipeline(
         logger.info("Keyboard interrupt received. Stopping...")
     finally:
         running = False
+        if voice_assistant:
+            voice_assistant.shutdown()
         total_time = time.time() - start_time
         avg_fps = frame_count / max(total_time, 1e-6)
         avg_latency = total_latency / max(frame_count, 1)
 
         logger.info("=" * 60)
-        logger.info("AURA Milestone 5 Execution Summary:")
+        logger.info("AURA Multimodal Assistant Execution Summary:")
         logger.info(f"  Total frames processed : {frame_count}")
         logger.info(f"  Total elapsed time     : {total_time:.2f} s")
         logger.info(f"  Average throughput     : {avg_fps:.1f} FPS")
@@ -518,6 +667,10 @@ def main():
         ann_thresh=args.ann_thresh,
         custom_classes=args.classes,
         sync_mode=args.sync,
+        enable_voice=args.voice,
+        enable_tts=not args.no_tts,
+        one_shot_query=args.query,
+        enable_chat_loop=args.chat,
     )
 
 

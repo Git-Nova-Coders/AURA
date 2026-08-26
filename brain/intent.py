@@ -66,14 +66,18 @@ class IntentClassifier:
 
         # Extract spatial keywords
         spatial_kws = ["left", "right", "center", "middle", "top", "bottom"]
-        spatial_keyword = next((kw for kw in spatial_kws if kw in q), None)
+        spatial_keyword = next((kw for kw in spatial_kws if re.search(r"\b" + kw + r"\b", q)), None)
 
-        # Extract target object
+        # Extract target object (sort longer names first to match 'cell phone' before 'phone')
         target_object = None
-        for obj in self.KNOWN_OBJECTS:
-            if obj in q:
-                target_object = obj
-                break
+        if "people" in q:
+            target_object = "person"
+        else:
+            for obj in sorted(self.KNOWN_OBJECTS, key=len, reverse=True):
+                pattern = r"\b" + re.escape(obj) + r"(?:s|es)?\b"
+                if re.search(pattern, q):
+                    target_object = obj
+                    break
 
         # 1. Voice control intent
         control_phrases = ["stop listening", "mute", "unmute", "clear memory", "toggle tracking"]
