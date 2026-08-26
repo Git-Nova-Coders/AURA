@@ -1,7 +1,7 @@
 """
 AURA Feature Builder Module
 Extracts geometric, confidence, and image-quality features from object detections.
-Produces standardized numerical feature vectors for the downstream Reliability ANN (Milestone 3).
+Produces standardized numerical feature vectors for the downstream Reliability ANN (Milestone 3 & 5).
 """
 
 import logging
@@ -44,20 +44,25 @@ class DetectionFeatures:
     brightness: float     # Mean pixel luminance in range [0.0, 255.0]
     contrast: float       # Standard deviation of pixel intensities in range [0.0, 128.0]
 
-    # Optional Tracking metadata (for future temporal persistence in M5)
+    # Tracking & Temporal Persistence Metadata (Milestone 5)
     track_id: Optional[int] = None
+    track_age: int = 1
+    temporal_persistence: float = 1.0  # ratio of hits to age in (0.0, 1.0]
+    motion_speed: float = 0.0          # velocity magnitude in px/frame
 
     def to_vector(
         self,
         include_class_onehot: bool = False,
+        include_temporal: bool = False,
         num_classes: int = 80,
     ) -> np.ndarray:
         """
         Converts the feature dataclass into a 1D NumPy array for PyTorch / ANN inference.
         
-        Vector order:
+        Base vector (14 features):
         [confidence, norm_x1, norm_y1, norm_x2, norm_y2, norm_width, norm_height,
          norm_area, norm_center_x, norm_center_y, aspect_ratio, blur_score, brightness, contrast]
+        + optional temporal features [track_age, temporal_persistence, motion_speed]
         + optional one-hot class encoding [c_0, ..., c_{num_classes-1}]
         
         Returns:
@@ -80,6 +85,13 @@ class DetectionFeatures:
             self.contrast,
         ]
 
+        if include_temporal:
+            base_features.extend([
+                float(self.track_age),
+                float(self.temporal_persistence),
+                float(self.motion_speed),
+            ])
+
         if include_class_onehot:
             one_hot = [0.0] * num_classes
             if 0 <= self.class_id < num_classes:
@@ -92,6 +104,7 @@ class DetectionFeatures:
     def feature_names(
         cls,
         include_class_onehot: bool = False,
+        include_temporal: bool = False,
         num_classes: int = 80,
     ) -> List[str]:
         """Returns standard column names for the numerical feature vector."""
@@ -111,6 +124,8 @@ class DetectionFeatures:
             "brightness",
             "contrast",
         ]
+        if include_temporal:
+            names.extend(["track_age", "temporal_persistence", "motion_speed"])
         if include_class_onehot:
             names.extend([f"class_{i}" for i in range(num_classes)])
         return names
@@ -138,6 +153,12 @@ class DetectionFeatures:
                 "brightness": round(float(self.brightness), 2),
                 "contrast": round(float(self.contrast), 2),
             },
+            "tracking": {
+                "track_id": self.track_id,
+                "track_age": self.track_age,
+                "temporal_persistence": round(float(self.temporal_persistence), 4),
+                "motion_speed": round(float(self.motion_speed), 2),
+            },
             "track_id": self.track_id,
         }
 
@@ -145,7 +166,7 @@ class DetectionFeatures:
 class FeatureBuilder:
     """
     Constructs standardized DetectionFeatures from raw frames and Detection objects.
-    Extracts geometric, blur, brightness, and contrast indicators.
+    Extracts geometric, blur, brightness, contrast, and temporal tracking indicators.
     """
 
     def __init__(
@@ -153,15 +174,20 @@ class FeatureBuilder:
         enable_blur: bool = True,
         enable_brightness: bool = True,
         enable_contrast: bool = True,
+        enable_temporal: bool = True,
     ):
         self.enable_blur = enable_blur
         self.enable_brightness = enable_brightness
         self.enable_contrast = enable_contrast
+        self.enable_temporal = enable_temporal
 
     def extract(
         self,
         frame: Union[np.ndarray, Frame],
         detection: Detection,
+        track_age: int = 1,
+        temporal_persistence: float = 1.0,
+        motion_speed: float = 0.0,
     ) -> DetectionFeatures:
         """
         Extracts numerical features from a single detection.
@@ -169,6 +195,9 @@ class FeatureBuilder:
         Args:
             frame: OpenCV BGR image array or AURA Frame.
             detection: Structured Detection object.
+            track_age: Number of frames object has been tracked.
+            temporal_persistence: Ratio of detected frames to lifespan.
+            motion_speed: Speed in px/frame.
             
         Returns:
             DetectionFeatures: Extracted feature representation.
@@ -242,21 +271,47 @@ class FeatureBuilder:
             brightness=brightness,
             contrast=contrast,
             track_id=detection.track_id,
+            track_age=track_age,
+            temporal_persistence=temporal_persistence,
+            motion_speed=motion_speed,
         )
 
     def extract_all(
         self,
         frame: Union[np.ndarray, Frame],
         detections: List[Detection],
+        tracks_map: Optional[Dict[int, Any]] = None,
     ) -> List[DetectionFeatures]:
         """
-        Extracts features for all detections in a frame.
+        Extracts features for all detections in a frame, linking temporal metadata if available.
         
         Args:
             frame: OpenCV BGR image array or AURA Frame.
             detections: List of Detection objects.
+            tracks_map: Optional mapping of track_id -> TrackedObject.
             
         Returns:
             List[DetectionFeatures]: Extracted features for each detection.
         """
-        return [self.extract(frame, det) for det in detections]
+        features_list = []
+        for det in detections:
+            age = 1
+            persistence = 1.0
+            speed = 0.0
+
+            if tracks_map and det.track_id in tracks_map:
+                t = tracks_map[det.track_id]
+                age = t.age
+                persistence = t.temporal_persistence
+                speed = t.motion_speed
+
+            feat = self.extract(
+                frame,
+                det,
+                track_age=age,
+                temporal_persistence=persistence,
+                motion_speed=speed,
+            )
+            features_list.append(feat)
+
+        return features_list

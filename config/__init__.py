@@ -2,6 +2,24 @@
 AURA Configuration Package
 """
 
-from .config import AuraConfig, CameraConfig, VisionConfig, FeaturesConfig, DisplayConfig
+from .config import (
+    AuraConfig,
+    CameraConfig,
+    VisionConfig,
+    TrackerConfig,
+    OCRConfig,
+    FeaturesConfig,
+    DisplayConfig,
+    AnnConfig,
+)
 
-__all__ = ["AuraConfig", "CameraConfig", "VisionConfig", "FeaturesConfig", "DisplayConfig"]
+__all__ = [
+    "AuraConfig",
+    "CameraConfig",
+    "VisionConfig",
+    "TrackerConfig",
+    "OCRConfig",
+    "FeaturesConfig",
+    "DisplayConfig",
+    "AnnConfig",
+]

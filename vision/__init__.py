@@ -1,7 +1,7 @@
 """
 AURA Vision Module
-Provides camera abstractions, pretrained YOLO object detection, visual annotations,
-structured feature extraction (FeatureBuilder), unified stream pipeline (VisionPipeline),
+Provides camera abstractions, pretrained YOLO object detection, multi-object tracking (M5),
+visual annotations, structured feature extraction (FeatureBuilder), unified stream pipeline (VisionPipeline),
 and dataset collection utilities (DatasetCollector).
 """
 
@@ -15,6 +15,7 @@ from .detector import (
     get_class_color,
 )
 from .features import DetectionFeatures, FeatureBuilder
+from .tracker import ObjectTracker, TrackedObject, compute_iou
 from .pipeline import VisionPipeline, PipelineResult
 from .dataset_collector import DatasetCollector, LabeledFeatureSample
 
@@ -31,6 +32,9 @@ __all__ = [
     "get_class_color",
     "DetectionFeatures",
     "FeatureBuilder",
+    "ObjectTracker",
+    "TrackedObject",
+    "compute_iou",
     "VisionPipeline",
     "PipelineResult",
     "DatasetCollector",

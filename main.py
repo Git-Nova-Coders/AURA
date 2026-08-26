@@ -1,24 +1,25 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
-Milestone 2: Real-Time Computer Vision & Feature Extraction Pipeline
-(Camera -> OpenCV -> YOLO Detection -> FeatureBuilder -> VisionPipeline)
+Milestone 5: Multi-Object Tracking & Optical Character Recognition (OCR) Pipeline
+(Camera -> OpenCV -> YOLO Detection -> Tracker -> OCR -> FeatureBuilder -> Reliability ANN -> VisionPipeline)
 
-Entry point for running live detection, feature extraction, dataset collection, or benchmarking.
+Entry point for running live detection, tracking, OCR, feature extraction, dataset collection, or benchmarking.
 """
 
 import sys
 import time
 import argparse
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import cv2
 import numpy as np
 
-from config.config import AuraConfig
 from vision.camera import CameraAdapter, CameraNotFoundError, Frame
 from vision.detector import ObjectDetector, ModelLoadError
+from vision.tracker import ObjectTracker
 from vision.features import FeatureBuilder
 from vision.dataset_collector import DatasetCollector
+from ocr.engine import OCREngine, TextDetection, draw_text_annotations
 
 # Setup logging
 logging.basicConfig(
@@ -31,7 +32,7 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AURA Visual Intelligence Assistant - Milestone 2 (Vision & Features)"
+        description="AURA Visual Intelligence Assistant - Milestone 5 (Tracking & OCR)"
     )
     parser.add_argument(
         "--source",
@@ -92,6 +93,22 @@ def parse_args() -> argparse.Namespace:
         help="Path to CSV file where extracted detection features should be recorded (e.g., 'data/features.csv').",
     )
     parser.add_argument(
+        "--no-track",
+        action="store_true",
+        help="Disable multi-object tracking (persistent track IDs).",
+    )
+    parser.add_argument(
+        "--ocr",
+        action="store_true",
+        help="Enable Optical Character Recognition (OCR) extraction.",
+    )
+    parser.add_argument(
+        "--ocr-stride",
+        type=int,
+        default=15,
+        help="Perform full OCR scan every N frames to maintain high video FPS. Default: 15",
+    )
+    parser.add_argument(
         "--no-ann",
         action="store_true",
         help="Disable the Reliability ANN module (force YOLO-only fallback mode).",
@@ -118,7 +135,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def create_synthetic_frame(frame_idx: int = 0) -> Frame:
-    """Generates a synthetic test frame for benchmark or headless verification without physical cameras."""
+    """Generates a synthetic test frame with moving shapes and visible text for benchmarking."""
     img = np.zeros((480, 640, 3), dtype=np.uint8)
     
     # Draw background gradient
@@ -130,14 +147,24 @@ def create_synthetic_frame(frame_idx: int = 0) -> Frame:
     cv2.rectangle(img, (50 + offset_x, 100), (180 + offset_x, 260), (0, 200, 255), -1)
     cv2.circle(img, (400, 240), 60, (255, 100, 0), -1)
     
-    # Text label
+    # Clear readable text
     cv2.putText(
         img,
-        f"AURA Synthetic Test Frame #{frame_idx}",
-        (20, 40),
+        f"AURA OCR SYSTEM",
+        (160, 60),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
+        1.0,
         (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        img,
+        f"Frame: {frame_idx:04d}",
+        (20, 440),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 255, 200),
         2,
         cv2.LINE_AA,
     )
@@ -150,10 +177,13 @@ def draw_hud(
     num_detections: int,
     model_name: str,
     latency_ms: float,
+    tracking_enabled: bool,
+    active_tracks: int,
+    ocr_texts_count: int,
     ann_version: str = "disabled",
 ) -> np.ndarray:
     """Draws a sleek Head-Up-Display (HUD) overlay on the top edge of the frame."""
-    hud_h = 36
+    hud_h = 38
     hud_bg = image[:hud_h, :].astype(np.float32)
     # Dark translucent header bar
     dark_overlay = np.zeros_like(hud_bg)
@@ -161,13 +191,15 @@ def draw_hud(
     image[:hud_h, :] = cv2.addWeighted(hud_bg, 0.35, dark_overlay, 0.65, 0).astype(np.uint8)
 
     # Info string
-    hud_text = f"AURA M2/M4  |  FPS: {fps:5.1f}  |  Latency: {latency_ms:4.1f}ms  |  Detections: {num_detections:2d}  |  Model: {model_name}  |  ANN: {ann_version}"
+    track_str = f"Tracks: {active_tracks}" if tracking_enabled else "Track: OFF"
+    ocr_str = f"OCR: {ocr_texts_count}" if ocr_texts_count >= 0 else "OCR: OFF"
+    hud_text = f"AURA M5 | FPS: {fps:4.1f} | {latency_ms:4.1f}ms | Obj: {num_detections} | {track_str} | {ocr_str} | ANN: {ann_version}"
     cv2.putText(
         image,
         hud_text,
-        (12, 24),
+        (10, 25),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
+        0.52,
         (0, 255, 180),
         1,
         cv2.LINE_AA,
@@ -186,16 +218,19 @@ def run_pipeline(
     benchmark: bool = False,
     max_frames: Optional[int] = None,
     dataset_csv: Optional[str] = None,
+    no_track: bool = False,
+    enable_ocr: bool = False,
+    ocr_stride: int = 15,
     no_ann: bool = False,
     ann_model: str = "models/reliability_ann.pth",
     ann_scaler: str = "models/scaler.pkl",
     ann_thresh: float = 0.5,
 ) -> int:
-    """Main execution loop for AURA Milestone 2 and 4."""
+    """Main execution loop for AURA Milestone 5."""
     source_target = int(source_val) if source_val.isdigit() else source_val
 
-    # Initialize ObjectDetector and FeatureBuilder
-    logger.info("Initializing ObjectDetector and FeatureBuilder...")
+    # Initialize ObjectDetector
+    logger.info("Initializing ObjectDetector...")
     try:
         detector = ObjectDetector(
             model_name=model_name,
@@ -205,6 +240,18 @@ def run_pipeline(
     except ModelLoadError as e:
         logger.error(f"Detector initialization failed: {e}")
         return 1
+
+    # Initialize Tracker
+    tracker: Optional[ObjectTracker] = None
+    if not no_track:
+        logger.info("Initializing Multi-Object Tracker...")
+        tracker = ObjectTracker(max_age=30, min_hits=1, iou_threshold=0.3)
+
+    # Initialize OCR Engine
+    ocr_engine: Optional[OCREngine] = None
+    if enable_ocr:
+        logger.info("Initializing OCR Engine...")
+        ocr_engine = OCREngine(confidence_threshold=0.3)
 
     feature_builder = FeatureBuilder()
     
@@ -246,7 +293,7 @@ def run_pipeline(
                 logger.info("Tip: Pass '--source synthetic' or '--headless --benchmark' to run automated testing without a camera.")
                 return 1
 
-    window_name = "AURA - Milestone 2 (Vision & Features)"
+    window_name = "AURA - Milestone 5 (Tracking & OCR)"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
@@ -256,8 +303,11 @@ def run_pipeline(
     fps_ema = 0.0
     alpha = 0.1  # Smoothing factor for FPS
 
+    last_ocr_texts: List[TextDetection] = []
+    tracking_active = not no_track
+
     logger.info("Starting visual processing loop. Press 'q' or ESC in window to exit...")
-    logger.info("Controls: 'q'=Quit, 's'=Save Snapshot, 'c'=Print Detections, 'f'=Print Extracted Features")
+    logger.info("Controls: 'q'=Quit, 's'=Save Snapshot, 'c'=Print Detections, 'f'=Print Features, 't'=Toggle Tracker, 'o'=Scan OCR")
 
     try:
         while True:
@@ -274,47 +324,69 @@ def run_pipeline(
 
             t_cap = time.perf_counter()
 
-            # 2. Run Object Detection, Feature Extraction & Reliability Estimation
+            # 2. Run Object Detection
             detections = detector.detect(frame)
-            features = feature_builder.extract_all(frame, detections) if detections else []
+
+            # 3. Run Multi-Object Tracking
+            tracks_map: Dict[int, Any] = {}
+            if tracking_active and tracker is not None:
+                detections = tracker.update(detections)
+                tracks_map = {t.track_id: t for t in tracker.all_tracks}
+
+            # 4. Feature Extraction & Reliability Estimation
+            features = feature_builder.extract_all(frame, detections, tracks_map=tracks_map) if detections else []
             if features:
                 for i, feat in enumerate(features):
                     rel_res = reliability_ann.predict(feat)
                     detections[i].reliability_score = rel_res.score
                     detections[i].reliability_label = rel_res.label
+
+            # 5. Periodic / Strided OCR
+            if ocr_engine is not None and (frame_count % max(1, ocr_stride) == 0):
+                last_ocr_texts = ocr_engine.extract_text(frame)
+
             t_infer = time.perf_counter()
             infer_latency_ms = (t_infer - t_cap) * 1000.0
             total_latency += infer_latency_ms
 
-            # 3. Record to Dataset if requested
+            # 6. Record to Dataset if requested
             if collector is not None and features:
                 collector.add_samples(features)
 
-            # 4. Calculate FPS
+            # 7. Calculate FPS
             loop_time = t_infer - t0
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = current_fps if frame_count == 0 else (alpha * current_fps + (1 - alpha) * fps_ema)
 
-            # 5. Render Annotations & HUD
+            # 8. Render Annotations & HUD
             annotated_frame = detector.annotate(frame, detections)
+            if ocr_engine is not None and last_ocr_texts:
+                annotated_frame = draw_text_annotations(annotated_frame, last_ocr_texts)
+
+            active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
+            ocr_count = len(last_ocr_texts) if ocr_engine is not None else -1
+
             annotated_frame = draw_hud(
                 annotated_frame,
                 fps=fps_ema,
                 num_detections=len(detections),
                 model_name=model_name,
                 latency_ms=infer_latency_ms,
+                tracking_enabled=tracking_active,
+                active_tracks=active_tracks_count,
+                ocr_texts_count=ocr_count,
                 ann_version=reliability_ann.model_version,
             )
 
             frame_count += 1
 
-            # Log periodic stats in headless/benchmark mode
+            # Log periodic stats
             if frame_count % 30 == 0 or frame_count == 1:
                 logger.info(
-                    f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)} | Features: {len(features)}"
+                    f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)} | Tracks: {active_tracks_count} | Texts: {max(0, ocr_count)}"
                 )
 
-            # 6. Display GUI if not headless
+            # 9. Display GUI if not headless
             if not headless:
                 cv2.imshow(window_name, annotated_frame)
                 key = cv2.waitKey(1) & 0xFF
@@ -329,6 +401,17 @@ def run_pipeline(
                     logger.info(f"Extracted features at frame {frame_count}:")
                     for feat in features:
                         print(" ", feat.to_dict())
+                elif key in (ord('t'), ord('T')):
+                    tracking_active = not tracking_active
+                    logger.info(f"Tracking toggled: {'ENABLED' if tracking_active else 'DISABLED'}")
+                elif key in (ord('o'), ord('O')):
+                    logger.info(f"Triggering instant OCR scan on frame {frame_count}...")
+                    if ocr_engine is None:
+                        ocr_engine = OCREngine(confidence_threshold=0.3)
+                    last_ocr_texts = ocr_engine.extract_text(frame)
+                    logger.info(f"Extracted {len(last_ocr_texts)} text instances:")
+                    for td in last_ocr_texts:
+                        print(f"   - '{td.text}' ({int(td.confidence * 100)}% conf) at {td.bbox}")
                 elif key in (ord('s'), ord('S')):
                     filename = f"aura_capture_{int(time.time())}.jpg"
                     cv2.imwrite(filename, annotated_frame)
@@ -347,7 +430,7 @@ def run_pipeline(
         avg_latency = total_latency / max(frame_count, 1)
 
         logger.info("=" * 60)
-        logger.info("AURA Milestone 2 Execution Summary:")
+        logger.info("AURA Milestone 5 Execution Summary:")
         logger.info(f"  Total frames processed : {frame_count}")
         logger.info(f"  Total elapsed time     : {total_time:.2f} s")
         logger.info(f"  Average throughput     : {avg_fps:.1f} FPS")
@@ -378,6 +461,9 @@ def main():
         benchmark=args.benchmark,
         max_frames=args.frames if args.frames is not None else (50 if args.benchmark else None),
         dataset_csv=args.collect_dataset,
+        no_track=args.no_track,
+        enable_ocr=args.ocr,
+        ocr_stride=args.ocr_stride,
         no_ann=args.no_ann,
         ann_model=args.ann_model,
         ann_scaler=args.ann_scaler,
