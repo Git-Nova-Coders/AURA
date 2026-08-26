@@ -1,10 +1,10 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
-Milestone 7: Multimodal Visual Intelligence Assistant
-(Camera -> YOLO/SAHI Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Knowledge Retrieval -> Conversational Reasoning -> Voice STT/TTS)
+Milestone 8: Multimodal Visual Agent with RAG, Vector Memory & Pluggable LLM Reasoning
+(Camera -> YOLO/SAHI Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Episodic Memory -> RAG Engine -> Conversational LLM Reasoning -> Voice STT/TTS)
 
 Entry point for running live detection, tracking, OCR, SAHI sliced inference, feature extraction,
-knowledge lookups, natural-language visual reasoning, and voice interaction.
+episodic spatial memory, RAG document retrieval, natural-language visual reasoning, and voice interaction.
 """
 
 import sys
@@ -16,7 +16,7 @@ from typing import Optional, List, Dict, Any
 import cv2
 import numpy as np
 
-from config.config import SAHIConfig
+from config.config import SAHIConfig, RAGConfig, MemoryConfig, IntelligenceConfig
 from vision.camera import CameraAdapter, CameraNotFoundError, Frame
 from vision.detector import ObjectDetector, ModelLoadError, Detection
 from vision.tracker import ObjectTracker
@@ -26,8 +26,11 @@ from ocr.engine import OCREngine, TextDetection, draw_text_annotations
 from ann.inference import ReliabilityInference
 from knowledge.retriever import KnowledgeRetriever
 from knowledge.sources import KnowledgeItem
+from knowledge.rag import RAGEngine
 from brain.context import ContextManager, SceneContext
 from brain.conversation import ConversationEngine, ConversationResponse
+from brain.memory import EpisodicMemory
+from brain.llm import create_llm_provider
 from voice.engine import VoiceAssistant
 from voice.tts import TextToSpeech
 from voice.stt import SpeechToText
@@ -43,7 +46,7 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AURA Visual Intelligence Assistant - Vision, Tracking, SAHI, Knowledge & Voice Assistant"
+        description="AURA Visual Intelligence Assistant - Vision, Tracking, SAHI, Memory, RAG & Voice Assistant"
     )
     parser.add_argument(
         "--source",
@@ -160,6 +163,34 @@ def parse_args() -> argparse.Namespace:
         help="Disable Text-To-Speech audio playback.",
     )
     parser.add_argument(
+        "--rag",
+        action="store_true",
+        help="Enable Retrieval-Augmented Generation (RAG) on documentation & manuals.",
+    )
+    parser.add_argument(
+        "--rag-dir",
+        type=str,
+        default="data/manuals",
+        help="Directory containing manuals/guides for RAG indexing. Default: 'data/manuals'",
+    )
+    parser.add_argument(
+        "--memory",
+        action="store_true",
+        help="Enable persistent episodic & spatial memory.",
+    )
+    parser.add_argument(
+        "--memory-db",
+        type=str,
+        default="data/memory.db",
+        help="Path to SQLite episodic memory database file. Default: 'data/memory.db'",
+    )
+    parser.add_argument(
+        "--llm",
+        type=str,
+        default="offline",
+        help="LLM Reasoning provider ('offline', 'gemini', 'ollama', 'openai'). Default: 'offline'",
+    )
+    parser.add_argument(
         "--query",
         type=str,
         default=None,
@@ -228,6 +259,8 @@ def draw_hud(
     active_tracks: int = 0,
     ocr_texts_count: int = -1,
     sahi_enabled: bool = False,
+    rag_enabled: bool = False,
+    memory_enabled: bool = False,
     ann_version: Optional[str] = None,
     voice_status: str = "OFF",
     last_subtitle: Optional[str] = None,
@@ -242,12 +275,14 @@ def draw_hud(
     track_str = f"Tracks: {active_tracks}" if tracking_enabled else "Tracking: OFF"
     ocr_str = f" | OCR: {ocr_texts_count}" if ocr_texts_count >= 0 else ""
     sahi_str = " | SAHI: ON" if sahi_enabled else ""
+    rag_str = " | RAG: ON" if rag_enabled else ""
+    mem_str = " | Mem: ON" if memory_enabled else ""
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
 
     hud_text = (
-        f"AURA v0.7 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{sahi_str}{ocr_str}{ann_str}{voice_badge}"
+        f"AURA v0.8 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
+        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}"
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -263,7 +298,7 @@ def draw_hud(
         hud_text,
         (10, 24),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.44,
+        0.42,
         (0, 255, 180),
         1,
         cv2.LINE_AA,
@@ -313,8 +348,13 @@ def run_pipeline(
     enable_sahi: bool = False,
     slice_size: int = 320,
     slice_overlap: float = 0.20,
+    enable_rag: bool = False,
+    rag_dir: str = "data/manuals",
+    enable_memory: bool = False,
+    memory_db: str = "data/memory.db",
+    llm_provider: str = "offline",
 ) -> int:
-    """Main execution loop for AURA Milestones 6 & 7 with SAHI."""
+    """Main execution loop for AURA Milestone 8 (Vision + SAHI + Memory + RAG + Voice)."""
     source_target = int(source_val) if source_val.isdigit() else source_val
     classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
 
@@ -367,13 +407,26 @@ def run_pipeline(
         device=device,
     )
 
-    # 5. Initialize Context Manager & Knowledge Retriever (Milestone 6)
-    logger.info("Initializing Multimodal Context Manager & Knowledge Retriever...")
+    # 5. Initialize Context Manager, Episodic Memory, RAG Engine, and LLM Provider (Milestone 8)
+    logger.info("Initializing Context Manager, Memory, RAG & LLM Engine...")
     context_manager = ContextManager()
     knowledge_retriever = KnowledgeRetriever(enable_curated=True, enable_wikipedia=True)
+
+    rag_engine = RAGEngine(RAGConfig(enabled=enable_rag, docs_directory=rag_dir))
+    if enable_rag:
+        rag_engine.initialize()
+
+    episodic_memory = EpisodicMemory(MemoryConfig(enabled=enable_memory, db_path=memory_db))
+
+    intel_cfg = IntelligenceConfig(llm_provider=llm_provider)
+    llm_reasoner = create_llm_provider(intel_cfg)
+
     conversation_engine = ConversationEngine(
         context_manager=context_manager,
         knowledge_retriever=knowledge_retriever,
+        rag_engine=rag_engine,
+        memory=episodic_memory,
+        llm_provider=llm_reasoner,
     )
 
     # Subtitle state for HUD
@@ -423,7 +476,7 @@ def run_pipeline(
                 logger.info("Tip: Pass '--source synthetic' or '--headless --benchmark' to run without camera.")
                 return 1
 
-    window_name = "AURA - Multimodal Visual Assistant"
+    window_name = "AURA - Multimodal Visual Agent"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
@@ -468,7 +521,7 @@ def run_pipeline(
         infer_thread.start()
 
     logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
-    logger.info("Controls: 'v'=Voice Push-to-Talk, 'c'=Console Query, 'k'=Object Knowledge, 'i'=Scene Info, 'm'=Memory, 't'=Toggle Tracker, 'h'=Toggle SAHI, 'o'=Scan OCR")
+    logger.info("Controls: 'v'=Voice, 'c'=Console Query, 'r'=RAG Lookup, 'k'=Knowledge, 'm'=Memory, 'i'=Scene Info, 't'=Tracker, 'h'=SAHI, 'o'=OCR")
 
     try:
         while True:
@@ -529,6 +582,10 @@ def run_pipeline(
                 frame_shape=frame.shape,
             )
 
+            # 7. Record Episodic Spatial Memory
+            if enable_memory and episodic_memory:
+                episodic_memory.record_scene(scene_context)
+
             # One-shot query handling if provided on CLI
             if one_shot_query and frame_count == 1:
                 logger.info(f"Executing one-shot query: '{one_shot_query}'")
@@ -539,16 +596,16 @@ def run_pipeline(
                 print(f"\n[AURA Response to: '{one_shot_query}']\n=> {resp.response_text}\n")
                 update_subtitle(resp.response_text)
 
-            # 7. Record to Dataset if requested
+            # 8. Record to Dataset if requested
             if collector is not None and features:
                 collector.add_samples(features)
 
-            # 8. Calculate Smooth FPS
+            # 9. Calculate Smooth FPS
             loop_time = time.perf_counter() - t0
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = current_fps if frame_count == 0 else (alpha * current_fps + (1 - alpha) * fps_ema)
 
-            # 9. Render Annotations & Enhanced HUD
+            # 10. Render Annotations & Enhanced HUD
             annotated_frame = detector.annotate(frame, detections)
             if ocr_engine is not None and last_ocr_texts:
                 annotated_frame = draw_text_annotations(annotated_frame, last_ocr_texts)
@@ -571,6 +628,8 @@ def run_pipeline(
                 active_tracks=active_tracks_count,
                 ocr_texts_count=ocr_count,
                 sahi_enabled=sahi_is_active,
+                rag_enabled=enable_rag,
+                memory_enabled=enable_memory,
                 ann_version=reliability_ann.model_version,
                 voice_status=v_status,
                 last_subtitle=sub_text,
@@ -583,7 +642,7 @@ def run_pipeline(
                     f"Frame {frame_count:4d} | FPS: {fps_ema:5.1f} | Latency: {infer_latency_ms:5.1f}ms | Detections: {len(detections)} | Tracks: {active_tracks_count} | Texts: {max(0, ocr_count)}"
                 )
 
-            # 10. Display GUI if not headless
+            # 11. Display GUI if not headless
             if not headless:
                 cv2.imshow(window_name, annotated_frame)
                 key = cv2.waitKey(1) & 0xFF
@@ -598,7 +657,7 @@ def run_pipeline(
                         logger.info("Voice assistant is not enabled. Pass '--voice' to enable.")
                 elif key in (ord('c'), ord('C')):
                     # Console query
-                    print("\n[AURA Prompt] Enter query about the visual scene: ", end="", flush=True)
+                    print("\n[AURA Prompt] Enter query about visual scene / manuals / memory: ", end="", flush=True)
                     user_q = input().strip()
                     if user_q:
                         if voice_assistant:
@@ -607,6 +666,19 @@ def run_pipeline(
                             resp = conversation_engine.respond(user_q)
                         print(f"[AURA Answer] {resp.response_text}\n")
                         update_subtitle(resp.response_text)
+                elif key in (ord('r'), ord('R')):
+                    # RAG Document Lookup on focused object or query
+                    if detections:
+                        target = detections[0]
+                        rag_res = rag_engine.retrieve_for_detection(target)
+                        if rag_res.has_results:
+                            top_doc = rag_res.top_document
+                            print(f"\n[RAG Document Match: {top_doc.title}]\n{top_doc.content}\n")
+                            update_subtitle(f"Manual: {top_doc.title}")
+                        else:
+                            print(f"\n[RAG] No matching manuals found for '{target.class_name}'.\n")
+                    else:
+                        print("\n[RAG] No objects detected to match against manuals.\n")
                 elif key in (ord('k'), ord('K')):
                     # Object Knowledge Lookup
                     if detections:
@@ -621,16 +693,19 @@ def run_pipeline(
                             print(f"\n[Knowledge] No encyclopedia facts found for '{target.class_name}'.\n")
                     else:
                         print("\n[Knowledge] No objects detected in current view.\n")
+                elif key in (ord('m'), ord('M')):
+                    if enable_memory and episodic_memory:
+                        print("\n[Episodic Memory - Recent Events]")
+                        events = episodic_memory.get_history("person", limit=3) + episodic_memory.get_history("laptop", limit=3)
+                        for ev in events:
+                            print(f" - {ev.describe()}")
+                        print()
+                    else:
+                        print("\n[Episodic Memory] Disabled. Pass '--memory' to enable.\n")
                 elif key in (ord('i'), ord('I')):
                     print(f"\n[Scene Context Summary]\n{scene_context.summary()}\n")
                     for e in scene_context.entities:
                         print(f" - {e.describe()}")
-                    print()
-                elif key in (ord('m'), ord('M')):
-                    turns = context_manager.get_recent_turns(5)
-                    print("\n[Conversation Memory]")
-                    for turn in turns:
-                        print(f" {turn['role'].upper()}: {turn['text']}")
                     print()
                 elif key in (ord('t'), ord('T')):
                     tracking_active = not tracking_active
@@ -666,12 +741,14 @@ def run_pipeline(
         running = False
         if voice_assistant:
             voice_assistant.shutdown()
+        if enable_memory and episodic_memory:
+            episodic_memory.close()
         total_time = time.time() - start_time
         avg_fps = frame_count / max(total_time, 1e-6)
         avg_latency = total_latency / max(frame_count, 1)
 
         logger.info("=" * 60)
-        logger.info("AURA Multimodal Assistant Execution Summary:")
+        logger.info("AURA Multimodal Agent Execution Summary:")
         logger.info(f"  Total frames processed : {frame_count}")
         logger.info(f"  Total elapsed time     : {total_time:.2f} s")
         logger.info(f"  Average throughput     : {avg_fps:.1f} FPS")
@@ -716,6 +793,11 @@ def main():
         enable_sahi=args.sahi,
         slice_size=args.slice_size,
         slice_overlap=args.slice_overlap,
+        enable_rag=args.rag,
+        rag_dir=args.rag_dir,
+        enable_memory=args.memory,
+        memory_db=args.memory_db,
+        llm_provider=args.llm,
     )
 
 
