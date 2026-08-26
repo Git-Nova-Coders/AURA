@@ -1,9 +1,9 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
 Milestone 7: Multimodal Visual Intelligence Assistant
-(Camera -> YOLO Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Knowledge Retrieval -> Conversational Reasoning -> Voice STT/TTS)
+(Camera -> YOLO/SAHI Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Knowledge Retrieval -> Conversational Reasoning -> Voice STT/TTS)
 
-Entry point for running live detection, tracking, OCR, feature extraction,
+Entry point for running live detection, tracking, OCR, SAHI sliced inference, feature extraction,
 knowledge lookups, natural-language visual reasoning, and voice interaction.
 """
 
@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Any
 import cv2
 import numpy as np
 
+from config.config import SAHIConfig
 from vision.camera import CameraAdapter, CameraNotFoundError, Frame
 from vision.detector import ObjectDetector, ModelLoadError, Detection
 from vision.tracker import ObjectTracker
@@ -42,7 +43,7 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AURA Visual Intelligence Assistant - Milestones 6 & 7 (Intelligence & Voice)"
+        description="AURA Visual Intelligence Assistant - Vision, Tracking, SAHI, Knowledge & Voice Assistant"
     )
     parser.add_argument(
         "--source",
@@ -89,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--headless",
         action="store_true",
-        help="Run without displaying GUI window (useful for servers, background, testing).",
+        help="Run without displaying GUI window.",
     )
     parser.add_argument(
         "--benchmark",
@@ -174,13 +175,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force synchronous single-threaded execution.",
     )
+    parser.add_argument(
+        "--sahi",
+        action="store_true",
+        help="Enable Slicing Aided Hyper Inference (SAHI) for fine-grained small object detection.",
+    )
+    parser.add_argument(
+        "--slice-size",
+        type=int,
+        default=320,
+        help="SAHI slice window dimension (square tile size in pixels). Default: 320",
+    )
+    parser.add_argument(
+        "--slice-overlap",
+        type=float,
+        default=0.20,
+        help="SAHI slice horizontal/vertical overlap ratio in range [0.0, 0.8]. Default: 0.20",
+    )
     return parser.parse_args()
 
 
 def create_synthetic_frame(frame_idx: int = 0) -> Frame:
     """Generates a synthetic test frame with moving shapes and visible text for benchmarking."""
     img = np.zeros((480, 640, 3), dtype=np.uint8)
-
+    
     # Gradient background
     for y in range(480):
         img[y, :, 0] = int(20 + 40 * (y / 480))
@@ -195,9 +213,9 @@ def create_synthetic_frame(frame_idx: int = 0) -> Frame:
     # Moving stationary object (notebook)
     nx = int(420 + 50 * np.cos(frame_idx * 0.03))
     cv2.rectangle(img, (nx - 60, 260), (nx + 60, 380), (180, 100, 40), -1)
-    cv2.putText(img, "AURA NOTEBOOK", (nx - 55, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+    cv2.putText(img, "AURA ARCHITECTURE GUIDE", (nx - 55, 320), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 255), 1)
 
-    return Frame(image=img, timestamp=time.time(), source_id="synthetic")
+    return Frame(image=img, timestamp=time.time(), frame_id=frame_idx, source_id="synthetic")
 
 
 def draw_hud(
@@ -209,25 +227,27 @@ def draw_hud(
     tracking_enabled: bool = True,
     active_tracks: int = 0,
     ocr_texts_count: int = -1,
+    sahi_enabled: bool = False,
     ann_version: Optional[str] = None,
-    voice_status: str = "IDLE",
+    voice_status: str = "OFF",
     last_subtitle: Optional[str] = None,
 ) -> np.ndarray:
-    """Renders a sleek top HUD status bar and bottom subtitle banner over the frame."""
+    """Renders a sleek HUD status bar and bottom subtitle display."""
     h, w = image.shape[:2]
 
-    # 1. Top status banner
+    # 1. Semi-transparent top banner
     overlay = image.copy()
     cv2.rectangle(overlay, (0, 0), (w, 36), (20, 20, 20), cv2.FILLED)
 
     track_str = f"Tracks: {active_tracks}" if tracking_enabled else "Tracking: OFF"
     ocr_str = f" | OCR: {ocr_texts_count}" if ocr_texts_count >= 0 else ""
+    sahi_str = " | SAHI: ON" if sahi_enabled else ""
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
 
     hud_text = (
         f"AURA v0.7 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{ocr_str}{ann_str}{voice_badge}"
+        f"Detections: {num_detections} | {track_str}{sahi_str}{ocr_str}{ann_str}{voice_badge}"
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -251,7 +271,6 @@ def draw_hud(
 
     # Render bottom subtitle
     if last_subtitle:
-        # Truncate subtitle for display if too long
         display_sub = last_subtitle[:100] + ("..." if len(last_subtitle) > 100 else "")
         cv2.putText(
             image,
@@ -291,10 +310,22 @@ def run_pipeline(
     enable_tts: bool = True,
     one_shot_query: Optional[str] = None,
     enable_chat_loop: bool = False,
+    enable_sahi: bool = False,
+    slice_size: int = 320,
+    slice_overlap: float = 0.20,
 ) -> int:
-    """Main execution loop for AURA Milestones 6 & 7."""
+    """Main execution loop for AURA Milestones 6 & 7 with SAHI."""
     source_target = int(source_val) if source_val.isdigit() else source_val
     classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
+
+    # SAHI Configuration
+    sahi_config = SAHIConfig(
+        enabled=enable_sahi,
+        slice_width=slice_size,
+        slice_height=slice_size,
+        overlap_width_ratio=slice_overlap,
+        overlap_height_ratio=slice_overlap,
+    )
 
     # 1. Initialize ObjectDetector
     logger.info("Initializing ObjectDetector...")
@@ -304,6 +335,7 @@ def run_pipeline(
             confidence_threshold=conf_thresh,
             device=device,
             custom_classes=classes_list,
+            sahi_config=sahi_config,
         )
     except ModelLoadError as e:
         logger.error(f"Detector initialization failed: {e}")
@@ -324,10 +356,8 @@ def run_pipeline(
         except Exception as e:
             logger.warning(f"OCR Engine failed to initialize: {e}. Running without OCR.")
 
-    # 4. Initialize Feature Builder
+    # 4. Initialize Feature Builder & Reliability ANN
     feature_builder = FeatureBuilder()
-
-    # 5. Initialize Reliability ANN
     logger.info("Initializing Reliability ANN...")
     reliability_ann = ReliabilityInference(
         enabled=not no_ann,
@@ -337,8 +367,8 @@ def run_pipeline(
         device=device,
     )
 
-    # 6. Initialize Milestone 6: Context Manager, Knowledge Retriever, Conversation Engine
-    logger.info("Initializing Context Manager & Knowledge Retriever (Milestone 6)...")
+    # 5. Initialize Context Manager & Knowledge Retriever (Milestone 6)
+    logger.info("Initializing Multimodal Context Manager & Knowledge Retriever...")
     context_manager = ContextManager()
     knowledge_retriever = KnowledgeRetriever(enable_curated=True, enable_wikipedia=True)
     conversation_engine = ConversationEngine(
@@ -346,8 +376,8 @@ def run_pipeline(
         knowledge_retriever=knowledge_retriever,
     )
 
-    # Subtitle state for HUD display
-    current_subtitle = ""
+    # Subtitle state for HUD
+    current_subtitle: Optional[str] = None
     subtitle_lock = threading.Lock()
 
     def update_subtitle(text: str):
@@ -355,24 +385,24 @@ def run_pipeline(
         with subtitle_lock:
             current_subtitle = text
 
-    # 7. Initialize Milestone 7: Voice Assistant
+    # 6. Initialize Voice Assistant (Milestone 7)
     voice_assistant: Optional[VoiceAssistant] = None
-    if enable_voice or enable_tts:
-        logger.info("Initializing Voice Assistant (Milestone 7)...")
+    if enable_voice:
+        logger.info("Initializing Voice Assistant (STT & TTS)...")
         voice_assistant = VoiceAssistant(
             conversation_engine=conversation_engine,
             enable_tts=enable_tts,
-            enable_stt=enable_voice,
-            on_response=lambda resp: update_subtitle(resp.response_text),
+            on_speech_start=lambda txt: update_subtitle(txt),
+            on_speech_end=lambda txt: None,
         )
 
     collector = DatasetCollector() if dataset_csv else None
 
-    # Initialize CameraAdapter
+    # 7. Initialize CameraAdapter
     use_synthetic = False
     camera: Optional[CameraAdapter] = None
 
-    if benchmark or source_val.lower() == "synthetic":
+    if source_val.lower() == "synthetic":
         use_synthetic = True
         logger.info("Using synthetic frame generator mode.")
     else:
@@ -393,7 +423,7 @@ def run_pipeline(
                 logger.info("Tip: Pass '--source synthetic' or '--headless --benchmark' to run without camera.")
                 return 1
 
-    window_name = "AURA - Visual Intelligence Assistant"
+    window_name = "AURA - Multimodal Visual Assistant"
     if not headless:
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
@@ -408,7 +438,7 @@ def run_pipeline(
 
     # --- Decoupled Real-Time Inference Threading Setup ---
     use_async = (not sync_mode) and (not use_synthetic) and (not benchmark)
-
+    
     current_detections: List[Detection] = []
     det_lock = threading.Lock()
     latest_camera_frame: Optional[Frame] = None
@@ -438,7 +468,7 @@ def run_pipeline(
         infer_thread.start()
 
     logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
-    logger.info("Controls: 'v'=Voice Push-to-Talk, 'c'=Console Query, 'k'=Object Knowledge, 'i'=Scene Info, 'm'=Memory, 't'=Toggle Tracker, 'o'=Scan OCR")
+    logger.info("Controls: 'v'=Voice Push-to-Talk, 'c'=Console Query, 'k'=Object Knowledge, 'i'=Scene Info, 'm'=Memory, 't'=Toggle Tracker, 'h'=Toggle SAHI, 'o'=Scan OCR")
 
     try:
         while True:
@@ -484,27 +514,30 @@ def run_pipeline(
                     detections[i].reliability_label = rel_res.label
 
             # 5. Periodic / Strided OCR
-            object_texts = {}
             if ocr_engine is not None and (frame_count % max(1, ocr_stride) == 0):
                 last_ocr_texts = ocr_engine.extract_text(frame)
-                object_texts = ocr_engine.extract_text_for_detections(frame.image, detections)
 
-            # 6. Update Context Manager (Milestone 6)
-            scene_context = context_manager.update(
+            # 6. Update Multimodal Context & Object-Text associations
+            object_texts_map: Dict[int, List[TextDetection]] = {}
+            if ocr_engine is not None and last_ocr_texts:
+                object_texts_map = ocr_engine.extract_text_for_detections(last_ocr_texts, detections)
+
+            scene_context: SceneContext = context_manager.update(
                 detections=detections,
                 text_detections=last_ocr_texts,
-                object_texts=object_texts,
-                frame_shape=frame.shape[:2],
+                object_texts=object_texts_map,
+                frame_shape=frame.shape,
             )
 
-            # One-shot query handling if supplied via CLI
-            if one_shot_query and frame_count == 3:
+            # One-shot query handling if provided on CLI
+            if one_shot_query and frame_count == 1:
                 logger.info(f"Executing one-shot query: '{one_shot_query}'")
-                resp = conversation_engine.respond(one_shot_query)
-                logger.info(f"[AURA Answer] {resp.response_text}")
+                if voice_assistant:
+                    resp = voice_assistant.process_text_query(one_shot_query, speak_output=enable_tts)
+                else:
+                    resp = conversation_engine.respond(one_shot_query)
+                print(f"\n[AURA Response to: '{one_shot_query}']\n=> {resp.response_text}\n")
                 update_subtitle(resp.response_text)
-                if voice_assistant and enable_tts:
-                    voice_assistant.tts.speak(resp.response_text)
 
             # 7. Record to Dataset if requested
             if collector is not None and features:
@@ -523,6 +556,7 @@ def run_pipeline(
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
             ocr_count = len(last_ocr_texts) if ocr_engine is not None else -1
             v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
+            sahi_is_active = bool(detector.sahi_config and detector.sahi_config.enabled)
 
             with subtitle_lock:
                 sub_text = current_subtitle
@@ -536,6 +570,7 @@ def run_pipeline(
                 tracking_enabled=tracking_active,
                 active_tracks=active_tracks_count,
                 ocr_texts_count=ocr_count,
+                sahi_enabled=sahi_is_active,
                 ann_version=reliability_ann.model_version,
                 voice_status=v_status,
                 last_subtitle=sub_text,
@@ -600,6 +635,13 @@ def run_pipeline(
                 elif key in (ord('t'), ord('T')):
                     tracking_active = not tracking_active
                     logger.info(f"Tracking toggled: {'ENABLED' if tracking_active else 'DISABLED'}")
+                elif key in (ord('h'), ord('H')):
+                    if detector.sahi_config and detector.sahi_config.enabled:
+                        detector.disable_sahi()
+                        logger.info("SAHI sliced inference: DISABLED")
+                    else:
+                        detector.enable_sahi(SAHIConfig(enabled=True, slice_width=slice_size, slice_height=slice_size, overlap_width_ratio=slice_overlap, overlap_height_ratio=slice_overlap))
+                        logger.info("SAHI sliced inference: ENABLED")
                 elif key in (ord('o'), ord('O')):
                     logger.info(f"Triggering instant OCR scan on frame {frame_count}...")
                     if ocr_engine is None:
@@ -671,6 +713,9 @@ def main():
         enable_tts=not args.no_tts,
         one_shot_query=args.query,
         enable_chat_loop=args.chat,
+        enable_sahi=args.sahi,
+        slice_size=args.slice_size,
+        slice_overlap=args.slice_overlap,
     )
 
 

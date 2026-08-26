@@ -1,6 +1,7 @@
 """
 AURA Vision Detector Module
 Supports standard YOLO models and YOLO-World Open-Vocabulary models with custom vocabularies,
+Slicing Aided Hyper Inference (SAHI) for fine-grained small object detection,
 structured detection outputs, per-class confidence thresholds, geometric anomaly suppression,
 and frame annotation.
 """
@@ -13,6 +14,7 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+from config.config import SAHIConfig
 from .camera import Frame
 
 logger = logging.getLogger(__name__)
@@ -43,7 +45,7 @@ DEFAULT_AURA_VOCABULARY: List[str] = [
 DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
     "laptop": 0.45,      # High accuracy now that 'notebook' is a distinct class
     "notebook": 0.35,    # Dedicated notebook detection
-    "pen": 0.30,         # Fine-object detection
+    "pen": 0.28,         # Fine-object detection
     "person": 0.40,      # Prevents floating hands/arms
     "smartphone": 0.40,  # Clear phone detection
     "headphones": 0.35,  # Audio gear
@@ -52,7 +54,7 @@ DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
     "book": 0.38,
     "backpack": 0.40,
     "handbag": 0.40,
-    "glasses": 0.30,
+    "glasses": 0.28,
 }
 
 
@@ -236,7 +238,8 @@ def draw_detections(
 class ObjectDetector:
     """
     Vision Engine object detector wrapping Ultralytics YOLO & YOLO-World Open-Vocabulary models.
-    Supports dynamic custom vocabulary, per-class thresholds, and geometric anomaly suppression.
+    Supports dynamic custom vocabulary, Slicing Aided Hyper Inference (SAHI), per-class thresholds,
+    and geometric anomaly suppression.
     """
 
     def __init__(
@@ -249,6 +252,7 @@ class ObjectDetector:
         enable_geometric_filter: bool = True,
         class_thresholds: Optional[Dict[str, float]] = None,
         custom_classes: Optional[List[str]] = None,
+        sahi_config: Optional[SAHIConfig] = None,
     ):
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
@@ -260,6 +264,12 @@ class ObjectDetector:
         self.custom_classes = custom_classes or (
             DEFAULT_AURA_VOCABULARY if "world" in model_name.lower() else None
         )
+        self.sahi_config = sahi_config
+        self._sahi_engine = None
+        if self.sahi_config and self.sahi_config.enabled:
+            from .sahi import SlicedInferenceEngine
+            self._sahi_engine = SlicedInferenceEngine(self.sahi_config)
+
         self._model: Optional[YOLO] = None
         self._load_model()
 
@@ -291,6 +301,22 @@ class ObjectDetector:
         if self._model is not None and hasattr(self._model, "set_classes"):
             self._model.set_classes(self.custom_classes)
             logger.info(f"Updated YOLO-World vocabulary ({len(self.custom_classes)} classes): {self.custom_classes}")
+
+    def enable_sahi(self, sahi_config: Optional[SAHIConfig] = None) -> None:
+        """Enables or updates Slicing Aided Hyper Inference (SAHI) settings."""
+        from .sahi import SlicedInferenceEngine
+        cfg = sahi_config or self.sahi_config or SAHIConfig(enabled=True)
+        cfg.enabled = True
+        self.sahi_config = cfg
+        self._sahi_engine = SlicedInferenceEngine(cfg)
+        logger.info(f"SAHI enabled: slice_size=({cfg.slice_width}x{cfg.slice_height}), overlap={cfg.overlap_width_ratio}")
+
+    def disable_sahi(self) -> None:
+        """Disables SAHI sliced inference."""
+        if self.sahi_config:
+            self.sahi_config.enabled = False
+        self._sahi_engine = None
+        logger.info("SAHI sliced inference disabled.")
 
     @property
     def class_names(self) -> Dict[int, str]:
@@ -337,28 +363,24 @@ class ObjectDetector:
 
         return clean_detections
 
-    def detect(
+    def _detect_single_frame(
         self,
-        frame: Union[np.ndarray, Frame],
+        img: np.ndarray,
         conf_threshold: Optional[float] = None,
         classes: Optional[List[int]] = None,
     ) -> List[Detection]:
-        """
-        Performs object detection on a single frame.
-        """
+        """Internal helper for standard single-image forward inference."""
         if self._model is None:
             raise DetectorError("Detector model is not loaded.")
 
-        img = frame.image if isinstance(frame, Frame) else frame
         if img is None or not isinstance(img, np.ndarray) or img.size == 0:
-            logger.warning("Received empty or invalid image frame for detection.")
             return []
 
         base_conf = conf_threshold if conf_threshold is not None else self.confidence_threshold
 
         predict_kwargs: Dict[str, Any] = {
             "source": img,
-            "conf": max(0.12, base_conf - 0.15),  # Predict with lower floor then apply per-class thresholds
+            "conf": max(0.10, base_conf - 0.15),  # Predict with lower floor then apply per-class thresholds
             "iou": self.iou_threshold,
             "verbose": False,
         }
@@ -406,11 +428,46 @@ class ObjectDetector:
                 )
             )
 
+        return detections
+
+    def detect(
+        self,
+        frame: Union[np.ndarray, Frame],
+        conf_threshold: Optional[float] = None,
+        classes: Optional[List[int]] = None,
+    ) -> List[Detection]:
+        """
+        Performs object detection on a single frame (standard or SAHI sliced inference).
+        """
+        img = frame.image if isinstance(frame, Frame) else frame
+        if img is None or not isinstance(img, np.ndarray) or img.size == 0:
+            logger.warning("Received empty or invalid image frame for detection.")
+            return []
+
+        # If SAHI is enabled, run sliced hyper inference
+        if self._sahi_engine is not None and self.sahi_config is not None and self.sahi_config.enabled:
+            return self._sahi_engine.slice_and_detect(self, img, conf_threshold=conf_threshold)
+
+        # Otherwise, run standard single-frame inference
+        detections = self._detect_single_frame(img, conf_threshold=conf_threshold, classes=classes)
+
         if self.enable_geometric_filter:
             img_h, img_w = img.shape[:2]
             detections = self._filter_geometric_anomalies(detections, img_w, img_h)
 
         return detections
+
+    def detect_sliced(
+        self,
+        frame: Union[np.ndarray, Frame],
+        sahi_config: Optional[SAHIConfig] = None,
+        conf_threshold: Optional[float] = None,
+    ) -> List[Detection]:
+        """Explicitly executes Slicing Aided Hyper Inference (SAHI) on the input frame."""
+        from .sahi import SlicedInferenceEngine
+        img = frame.image if isinstance(frame, Frame) else frame
+        engine = SlicedInferenceEngine(sahi_config or self.sahi_config or SAHIConfig(enabled=True))
+        return engine.slice_and_detect(self, img, conf_threshold=conf_threshold)
 
     def annotate(
         self,
@@ -431,7 +488,8 @@ class ObjectDetector:
         )
 
     def __repr__(self) -> str:
+        sahi_str = f", sahi={self.sahi_config.enabled}" if (self.sahi_config and self.sahi_config.enabled) else ""
         return (
             f"<ObjectDetector(model='{self.model_name}', conf_threshold={self.confidence_threshold}, "
-            f"device='{self.device}')>"
+            f"device='{self.device}'{sahi_str})>"
         )
