@@ -87,6 +87,38 @@ class AnnConfig:
 
 
 @dataclass
+class KnowledgeConfig:
+    """Configuration for Knowledge Retrieval Engine (Milestone 6)."""
+    enable_curated: bool = True
+    enable_wikipedia: bool = True
+    cache_size: int = 256
+    cache_ttl_seconds: float = 3600.0
+    wikipedia_timeout: float = 3.0
+
+
+@dataclass
+class IntelligenceConfig:
+    """Configuration for Context Manager and Conversational Intelligence (Milestone 6)."""
+    max_history_turns: int = 20
+    max_entity_history: int = 50
+    inactive_timeout_seconds: float = 5.0
+    llm_provider: str = "offline"  # 'offline', 'gemini', 'openai', 'ollama'
+
+
+@dataclass
+class VoiceConfig:
+    """Configuration for Speech-to-Text and Text-to-Speech (Milestone 7)."""
+    enabled: bool = False
+    tts_enabled: bool = True
+    stt_enabled: bool = True
+    tts_rate: int = 175  # Words per minute
+    tts_volume: float = 1.0  # Range 0.0 to 1.0
+    stt_energy_threshold: int = 300
+    stt_language: str = "en-US"
+    push_to_talk: bool = True
+
+
+@dataclass
 class AuraConfig:
     """Master configuration for AURA application."""
     camera: CameraConfig = field(default_factory=CameraConfig)
@@ -96,3 +128,7 @@ class AuraConfig:
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
     ann: AnnConfig = field(default_factory=AnnConfig)
+    knowledge: KnowledgeConfig = field(default_factory=KnowledgeConfig)
+    intelligence: IntelligenceConfig = field(default_factory=IntelligenceConfig)
+    voice: VoiceConfig = field(default_factory=VoiceConfig)
+
