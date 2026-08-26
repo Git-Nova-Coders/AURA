@@ -21,7 +21,7 @@ class CameraConfig:
 @dataclass
 class VisionConfig:
     """Configuration for object detection vision engine."""
-    model_name: str = "yolo11m.pt"  # Upgraded to YOLOv11 Medium for high-accuracy discrimination
+    model_name: str = "yolo11s.pt"  # YOLOv11 Small: optimal 30 FPS CPU speed with high accuracy
     confidence_threshold: float = 0.40  # Raised from 0.25 to 0.40 to eliminate noisy false positives
     iou_threshold: float = 0.45
     device: str = "auto"  # 'auto', 'cpu', 'cuda', etc.
