@@ -136,6 +136,20 @@ class TestObjectDetector(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0], valid_person)
 
+    def test_yolo_world_custom_vocabulary(self):
+        """Verify YOLO-World can be initialized with custom classes like notebook and pen."""
+        custom_classes = ["notebook", "pen", "laptop", "person"]
+        detector = ObjectDetector(
+            model_name="yolov8s-worldv2.pt",
+            confidence_threshold=0.3,
+            custom_classes=custom_classes,
+        )
+        self.assertEqual(detector.custom_classes, custom_classes)
+        self.assertEqual(len(detector.class_names), 4)
+        self.assertEqual(detector.class_names[0], "notebook")
+        self.assertEqual(detector.class_names[1], "pen")
+
 
 if __name__ == "__main__":
     unittest.main()
+
