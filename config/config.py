@@ -98,11 +98,35 @@ class KnowledgeConfig:
 
 @dataclass
 class IntelligenceConfig:
-    """Configuration for Context Manager and Conversational Intelligence (Milestone 6)."""
+    """Configuration for Context Manager and Conversational Intelligence (Milestone 6 & 8)."""
     max_history_turns: int = 20
     max_entity_history: int = 50
     inactive_timeout_seconds: float = 5.0
     llm_provider: str = "offline"  # 'offline', 'gemini', 'openai', 'ollama'
+    llm_model: str = "gemini-1.5-flash"
+    temperature: float = 0.2
+    api_key_env: str = "GEMINI_API_KEY"
+
+
+@dataclass
+class RAGConfig:
+    """Configuration for Retrieval-Augmented Generation & Vector Store (Milestone 8)."""
+    enabled: bool = True
+    docs_directory: str = "data/manuals"
+    vector_index_path: str = "models/vector_index.json"
+    top_k: int = 3
+    similarity_threshold: float = 0.20
+    chunk_size: int = 300
+    chunk_overlap: int = 50
+
+
+@dataclass
+class MemoryConfig:
+    """Configuration for Persistent Episodic & Spatial Memory (Milestone 8)."""
+    enabled: bool = True
+    db_path: str = "data/memory.db"
+    snapshot_interval_seconds: float = 2.0
+    retention_days: int = 7
 
 
 @dataclass
@@ -143,5 +167,7 @@ class AuraConfig:
     ann: AnnConfig = field(default_factory=AnnConfig)
     knowledge: KnowledgeConfig = field(default_factory=KnowledgeConfig)
     intelligence: IntelligenceConfig = field(default_factory=IntelligenceConfig)
+    rag: RAGConfig = field(default_factory=RAGConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     voice: VoiceConfig = field(default_factory=VoiceConfig)
 
