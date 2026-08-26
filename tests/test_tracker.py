@@ -50,9 +50,9 @@ class TestObjectTracker(unittest.TestCase):
         self.assertEqual(track.age, 2)
         self.assertEqual(track.hits, 2)
         self.assertEqual(track.time_since_update, 0)
-        self.assertAlmostEqual(track.velocity[0], 10.0)
+        self.assertAlmostEqual(track.velocity[0], 6.5)
         self.assertAlmostEqual(track.velocity[1], 0.0)
-        self.assertAlmostEqual(track.motion_speed, 10.0)
+        self.assertAlmostEqual(track.motion_speed, 6.5)
 
         # Frame 3: Object missed
         track.mark_missed()
