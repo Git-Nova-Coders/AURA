@@ -241,7 +241,7 @@ class ObjectDetector:
 
     def __init__(
         self,
-        model_name: str = "yolov8s-worldv2.pt",
+        model_name: str = "yolov8m-worldv2.pt",
         confidence_threshold: float = 0.35,
         iou_threshold: float = 0.45,
         device: str = "auto",
