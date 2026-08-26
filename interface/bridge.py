@@ -230,8 +230,8 @@ class AuraBridge:
             logger.warning("Camera not found. Falling back to synthetic frames.")
             self._use_synthetic = True
 
-    def _create_synthetic_frame(self, idx: int) -> Frame:
-        """Generates a synthetic test frame with moving shapes."""
+    def _create_synthetic_frame(self, idx: int) -> Tuple[Frame, List[Detection], List[TextDetection]]:
+        """Generates a synthetic test frame with moving objects, bounding boxes, and visible text."""
         img = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
         # Gradient background
@@ -240,7 +240,7 @@ class AuraBridge:
             img[y, :, 1] = int(20 + 20 * (y / self.height))
             img[y, :, 2] = int(40 + 60 * (y / self.height))
 
-        # Moving person-like rectangle
+        # Moving person-like shape
         cx = int(200 + 100 * np.sin(idx * 0.05))
         cv2.rectangle(img, (cx - 40, 100), (cx + 40, 340), (60, 180, 75), -1)
         cv2.circle(img, (cx, 80), 30, (60, 180, 75), -1)
@@ -253,11 +253,19 @@ class AuraBridge:
             cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1,
         )
 
-        return Frame(
+        synth_frame = Frame(
             image=img,
             timestamp=time.time(),
             source_id="synthetic",
         )
+        synth_dets = [
+            Detection(class_id=0, class_name="person", confidence=0.92, bbox=[cx - 40.0, 50.0, cx + 40.0, 340.0]),
+            Detection(class_id=1, class_name="notebook", confidence=0.88, bbox=[nx - 60.0, 260.0, nx + 60.0, 380.0]),
+        ]
+        synth_texts = [
+            TextDetection(text="AURA MANUAL", confidence=0.95, bbox=[nx - 50, 310, nx + 50, 330]),
+        ]
+        return synth_frame, synth_dets, synth_texts
 
     def _pipeline_loop(self) -> None:
         """Main vision pipeline loop running in a background thread."""
@@ -268,22 +276,51 @@ class AuraBridge:
 
         logger.info("Pipeline loop started.")
 
+        # Decoupled async inference worker for live camera / video sources
+        current_camera_dets: List[Detection] = []
+        det_lock = threading.Lock()
+        latest_camera_frame: Optional[Frame] = None
+        frame_lock = threading.Lock()
+        last_infer_latency = 0.0
+
+        def async_inference_worker():
+            nonlocal current_camera_dets, last_infer_latency
+            while self._running:
+                work_frame = None
+                with frame_lock:
+                    if latest_camera_frame is not None:
+                        work_frame = latest_camera_frame
+                if work_frame is not None:
+                    t0_inf = time.perf_counter()
+                    dets = self.detector.detect(work_frame)
+                    t1_inf = time.perf_counter()
+                    with det_lock:
+                        current_camera_dets = dets
+                        last_infer_latency = (t1_inf - t0_inf) * 1000.0
+                time.sleep(0.005)
+
+        if not self._use_synthetic:
+            infer_thread = threading.Thread(target=async_inference_worker, daemon=True, name="AURA_Async_Infer")
+            infer_thread.start()
+
         while self._running:
             t0 = time.perf_counter()
 
-            # 1. Capture frame
+            # 1. Capture frame & detect
             if self._use_synthetic:
-                frame = self._create_synthetic_frame(frame_count)
+                frame, detections, synth_texts = self._create_synthetic_frame(frame_count)
+                self._last_ocr_texts = synth_texts
+                infer_latency_ms = 15.0
             else:
                 frame = self._camera.read()
                 if frame is None:
                     logger.info("Camera stream ended.")
                     break
-
-            # 2. Detect
-            detections = self.detector.detect(frame)
-            t_infer = time.perf_counter()
-            infer_latency_ms = (t_infer - t0) * 1000.0
+                with frame_lock:
+                    latest_camera_frame = frame
+                with det_lock:
+                    detections = list(current_camera_dets)
+                infer_latency_ms = last_infer_latency
 
             # 3. Track
             tracks_map: Dict[int, Any] = {}
@@ -304,19 +341,27 @@ class AuraBridge:
                     detections[i].reliability_score = rel_res.score
                     detections[i].reliability_label = rel_res.label
 
-            # 5. Periodic OCR
+            # 5. Periodic OCR (for camera mode)
             if (
-                self.ocr_engine is not None
+                not self._use_synthetic
+                and self.ocr_engine is not None
                 and (frame_count % max(1, self.ocr_stride) == 0)
             ):
                 self._last_ocr_texts = self.ocr_engine.extract_text(frame)
 
             # 6. Context update
             object_texts_map: Dict[int, List[TextDetection]] = {}
-            if self.ocr_engine is not None and self._last_ocr_texts:
-                object_texts_map = self.ocr_engine.extract_text_for_detections(
-                    self._last_ocr_texts, detections,
-                )
+            if self._last_ocr_texts and detections:
+                for idx, det in enumerate(detections):
+                    key = det.track_id if det.track_id is not None else idx
+                    dx1, dy1, dx2, dy2 = det.bbox
+                    matching = []
+                    for t in self._last_ocr_texts:
+                        tcx, tcy = t.center
+                        if dx1 <= tcx <= dx2 and dy1 <= tcy <= dy2:
+                            matching.append(t)
+                    if matching:
+                        object_texts_map[key] = matching
 
             scene_context = self.context_manager.update(
                 detections=detections,
@@ -331,7 +376,7 @@ class AuraBridge:
 
             # 8. Annotate frame
             annotated = self.detector.annotate(frame, detections)
-            if self.ocr_engine is not None and self._last_ocr_texts:
+            if self._last_ocr_texts:
                 annotated = draw_text_annotations(annotated, self._last_ocr_texts)
 
             # 9. Encode to JPEG
@@ -350,9 +395,7 @@ class AuraBridge:
             active_tracks = (
                 len(self.tracker.active_tracks) if self._tracking_enabled else 0
             )
-            ocr_count = (
-                len(self._last_ocr_texts) if self.ocr_engine is not None else 0
-            )
+            ocr_count = len(self._last_ocr_texts)
             sahi_active = bool(
                 self.detector.sahi_config and self.detector.sahi_config.enabled
             )
@@ -378,7 +421,7 @@ class AuraBridge:
 
             frame_count += 1
 
-            # Throttle to ~30 FPS max to avoid burning CPU
+            # Target ~30 FPS preview loop
             elapsed = time.perf_counter() - t0
             target_interval = 1.0 / 30.0
             if elapsed < target_interval:
