@@ -121,6 +121,21 @@ class TestObjectDetector(unittest.TestCase):
             self.assertIsInstance(det, Detection)
             self.assertTrue(0.0 <= det.confidence <= 1.0)
 
+    def test_geometric_anomaly_filtering(self):
+        """Verify geometric filtering suppresses hand-like person boxes and tiny laptop slivers."""
+        detector = ObjectDetector(model_name="yolo11n.pt", confidence_threshold=0.25, enable_geometric_filter=True)
+        
+        # 1. Hand-like tiny person box (area = 20x20 = 400 on 640x480 frame -> ~0.13% of frame)
+        false_hand = Detection(class_id=0, class_name="person", confidence=0.45, bbox=[10.0, 10.0, 30.0, 30.0])
+        # 2. Valid full person box (area = 150x300 = 45000)
+        valid_person = Detection(class_id=0, class_name="person", confidence=0.88, bbox=[100.0, 50.0, 250.0, 350.0])
+        # 3. Micro noise box (< 100px)
+        micro_noise = Detection(class_id=56, class_name="chair", confidence=0.50, bbox=[5.0, 5.0, 10.0, 10.0])
+
+        filtered = detector._filter_geometric_anomalies([false_hand, valid_person, micro_noise], img_w=640, img_h=480)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0], valid_person)
+
 
 if __name__ == "__main__":
     unittest.main()
