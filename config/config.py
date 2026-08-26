@@ -21,11 +21,12 @@ class CameraConfig:
 @dataclass
 class VisionConfig:
     """Configuration for object detection vision engine."""
-    model_name: str = "yolo11n.pt"
-    confidence_threshold: float = 0.25
+    model_name: str = "yolo11m.pt"  # Upgraded to YOLOv11 Medium for high-accuracy discrimination
+    confidence_threshold: float = 0.40  # Raised from 0.25 to 0.40 to eliminate noisy false positives
     iou_threshold: float = 0.45
     device: str = "auto"  # 'auto', 'cpu', 'cuda', etc.
     half: bool = False  # FP16 inference if CUDA is available
+    enable_geometric_filter: bool = True  # Suppress false positives (hands as person, notebooks as laptop)
 
 
 @dataclass
@@ -34,7 +35,7 @@ class TrackerConfig:
     enabled: bool = True
     algorithm: str = "iou"  # 'iou' or 'bytetrack'
     max_age: int = 30  # Maximum frames to keep lost tracks alive
-    min_hits: int = 2   # Minimum detections before confirming a track
+    min_hits: int = 2   # Minimum consecutive detections before confirming a track (filters 1-frame glitches)
     iou_threshold: float = 0.3  # IoU association threshold
 
 
