@@ -7,3 +7,7 @@ torch
 torchvision
 ultralytics
 easyocr
+fastapi
+uvicorn[standard]
+websockets
+pydantic
