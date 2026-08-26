@@ -51,6 +51,10 @@ class ObjectEntity:
         return self.width * self.height
 
     @property
+    def spatial_region(self) -> str:
+        return self.spatial_pos
+
+    @property
     def text_content(self) -> str:
         """Concatenates all recognized text on this object."""
         return " ".join(t.text for t in self.texts) if self.texts else ""
@@ -382,6 +386,25 @@ class ContextManager:
     def get_recent_turns(self, n: int = 5) -> List[Dict[str, str]]:
         """Returns the most recent n turns of conversation history."""
         return self.conversation_history[-n:]
+
+    def get_entity_by_class(self, class_name: str) -> Optional[ObjectEntity]:
+        """Finds an active entity in the current scene matching the class name."""
+        if not self.latest_scene or not self.latest_scene.entities:
+            return None
+        target = class_name.lower().strip()
+        for e in self.latest_scene.entities:
+            if e.class_name.lower() == target:
+                return e
+        return None
+
+    def get_entity_by_track_id(self, track_id: int) -> Optional[ObjectEntity]:
+        """Finds an active entity in the current scene matching the track ID."""
+        if not self.latest_scene or not self.latest_scene.entities:
+            return None
+        for e in self.latest_scene.entities:
+            if e.track_id == track_id:
+                return e
+        return None
 
     def clear(self) -> None:
         """Resets all context and history."""
