@@ -43,14 +43,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="yolo11s.pt",
-        help="YOLO model path or identifier (e.g., 'yolo11s.pt', 'yolo11m.pt', 'yolo11n.pt'). Default: 'yolo11s.pt'",
+        default="yolov8s-worldv2.pt",
+        help="YOLO model path or identifier (e.g., 'yolov8s-worldv2.pt', 'yolo11s.pt', 'yolo11n.pt'). Default: 'yolov8s-worldv2.pt'",
     )
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.40,
-        help="Detection confidence threshold in range [0.0, 1.0]. Default: 0.40",
+        default=0.35,
+        help="Detection confidence threshold in range [0.0, 1.0]. Default: 0.35",
+    )
+    parser.add_argument(
+        "--classes",
+        type=str,
+        default=None,
+        help="Comma-separated custom class names for YOLO-World (e.g. 'person,laptop,notebook,pen,smartphone'). Default: AURA indoor vocabulary",
     )
     parser.add_argument(
         "--device",
@@ -225,9 +231,12 @@ def run_pipeline(
     ann_model: str = "models/reliability_ann.pth",
     ann_scaler: str = "models/scaler.pkl",
     ann_thresh: float = 0.5,
+    custom_classes: Optional[str] = None,
 ) -> int:
     """Main execution loop for AURA Milestone 5."""
     source_target = int(source_val) if source_val.isdigit() else source_val
+
+    classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
 
     # Initialize ObjectDetector
     logger.info("Initializing ObjectDetector...")
@@ -236,6 +245,7 @@ def run_pipeline(
             model_name=model_name,
             confidence_threshold=conf_thresh,
             device=device,
+            custom_classes=classes_list,
         )
     except ModelLoadError as e:
         logger.error(f"Detector initialization failed: {e}")
@@ -468,6 +478,7 @@ def main():
         ann_model=args.ann_model,
         ann_scaler=args.ann_scaler,
         ann_thresh=args.ann_thresh,
+        custom_classes=args.classes,
     )
 
 
