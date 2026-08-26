@@ -29,8 +29,8 @@ def parse_args():
         description="AURA Interactive Web Dashboard — Vision + AI Interface"
     )
     parser.add_argument(
-        "--source", type=str, default="synthetic",
-        help="Camera index, video path, or 'synthetic'. Default: synthetic",
+        "--source", type=str, default="0",
+        help="Camera index, video path, or 'synthetic'. Default: 0 (webcam)",
     )
     parser.add_argument(
         "--model", type=str, default="yolov8m-worldv2.pt",
