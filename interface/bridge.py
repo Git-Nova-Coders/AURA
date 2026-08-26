@@ -1,0 +1,538 @@
+"""
+AURA Pipeline Bridge (Milestone 9)
+Thread-safe bridge between the AURA vision/reasoning pipeline and the FastAPI web server.
+Maintains double-buffered state for zero-contention reads from WebSocket/REST handlers.
+"""
+
+import time
+import base64
+import logging
+import threading
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any, Tuple
+
+import cv2
+import numpy as np
+
+from config.config import (
+    SAHIConfig, RAGConfig, MemoryConfig, IntelligenceConfig,
+)
+from vision.camera import CameraAdapter, CameraNotFoundError, Frame
+from vision.detector import ObjectDetector, ModelLoadError, Detection
+from vision.tracker import ObjectTracker
+from vision.features import FeatureBuilder
+from ocr.engine import OCREngine, TextDetection, draw_text_annotations
+from ann.inference import ReliabilityInference
+from knowledge.retriever import KnowledgeRetriever
+from knowledge.rag import RAGEngine
+from brain.context import ContextManager, SceneContext, ObjectEntity
+from brain.conversation import ConversationEngine, ConversationResponse
+from brain.memory import EpisodicMemory
+from brain.llm import create_llm_provider
+
+logger = logging.getLogger("AURA.Bridge")
+
+
+@dataclass
+class TelemetrySnapshot:
+    """Thread-safe telemetry state snapshot."""
+    fps: float = 0.0
+    inference_latency_ms: float = 0.0
+    frame_count: int = 0
+    active_tracks: int = 0
+    detection_count: int = 0
+    ocr_text_count: int = 0
+    sahi_enabled: bool = False
+    tracking_enabled: bool = True
+    ann_version: Optional[str] = None
+    voice_status: str = "OFF"
+    memory_enabled: bool = False
+    rag_enabled: bool = False
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "fps": round(self.fps, 1),
+            "inference_latency_ms": round(self.inference_latency_ms, 1),
+            "frame_count": self.frame_count,
+            "active_tracks": self.active_tracks,
+            "detection_count": self.detection_count,
+            "ocr_text_count": self.ocr_text_count,
+            "sahi_enabled": self.sahi_enabled,
+            "tracking_enabled": self.tracking_enabled,
+            "ann_version": self.ann_version,
+            "voice_status": self.voice_status,
+            "memory_enabled": self.memory_enabled,
+            "rag_enabled": self.rag_enabled,
+            "timestamp": round(self.timestamp, 2),
+        }
+
+
+class AuraBridge:
+    """
+    Thread-safe bridge connecting the AURA vision pipeline to the web interface.
+    Maintains buffered state for concurrent reads from multiple WebSocket clients.
+    """
+
+    def __init__(
+        self,
+        source: str = "synthetic",
+        model_name: str = "yolov8m-worldv2.pt",
+        conf_thresh: float = 0.35,
+        device: str = "auto",
+        width: int = 640,
+        height: int = 480,
+        custom_classes: Optional[str] = None,
+        enable_sahi: bool = False,
+        slice_size: int = 320,
+        slice_overlap: float = 0.20,
+        enable_ocr: bool = True,
+        ocr_stride: int = 30,
+        no_ann: bool = False,
+        ann_model: str = "models/reliability_ann.pth",
+        ann_scaler: str = "models/scaler.pkl",
+        ann_thresh: float = 0.5,
+        enable_rag: bool = True,
+        rag_dir: str = "data/manuals",
+        enable_memory: bool = True,
+        memory_db: str = "data/memory.db",
+        llm_provider: str = "offline",
+    ):
+        self.source = source
+        self.width = width
+        self.height = height
+
+        # Thread-safe state buffers
+        self._lock = threading.Lock()
+        self._frame_lock = threading.Lock()
+        self._running = False
+
+        # Buffered state
+        self._latest_annotated_jpeg: Optional[bytes] = None
+        self._latest_scene: Optional[SceneContext] = None
+        self._latest_detections: List[Detection] = []
+        self._telemetry = TelemetrySnapshot()
+
+        # Parse custom classes
+        classes_list = (
+            [c.strip() for c in custom_classes.split(",") if c.strip()]
+            if custom_classes else None
+        )
+
+        # SAHI config
+        sahi_config = SAHIConfig(
+            enabled=enable_sahi,
+            slice_width=slice_size,
+            slice_height=slice_size,
+            overlap_width_ratio=slice_overlap,
+            overlap_height_ratio=slice_overlap,
+        )
+
+        # Initialize pipeline components
+        logger.info("Initializing AURA Pipeline Bridge...")
+
+        try:
+            self.detector = ObjectDetector(
+                model_name=model_name,
+                confidence_threshold=conf_thresh,
+                device=device,
+                custom_classes=classes_list,
+                sahi_config=sahi_config,
+            )
+        except ModelLoadError as e:
+            logger.error(f"Detector init failed: {e}")
+            raise
+
+        self.tracker = ObjectTracker(
+            max_age=30, min_hits=1, iou_threshold=0.3, smooth_factor=0.65
+        )
+        self.feature_builder = FeatureBuilder()
+
+        # OCR
+        self.ocr_engine: Optional[OCREngine] = None
+        self.ocr_stride = ocr_stride
+        self.enable_ocr = enable_ocr
+        if enable_ocr:
+            try:
+                self.ocr_engine = OCREngine(confidence_threshold=0.3)
+            except Exception as e:
+                logger.warning(f"OCR init failed: {e}. Running without OCR.")
+
+        # ANN
+        self.reliability_ann = ReliabilityInference(
+            enabled=not no_ann,
+            model_path=ann_model,
+            scaler_path=ann_scaler,
+            confidence_threshold=ann_thresh,
+            device=device,
+        )
+
+        # Context Manager & Brain
+        self.context_manager = ContextManager()
+        self.knowledge_retriever = KnowledgeRetriever(
+            enable_curated=True, enable_wikipedia=True,
+        )
+
+        # RAG
+        self.rag_engine = RAGEngine(
+            RAGConfig(enabled=enable_rag, docs_directory=rag_dir)
+        )
+        if enable_rag:
+            self.rag_engine.initialize()
+
+        # Episodic Memory
+        self.episodic_memory = EpisodicMemory(
+            MemoryConfig(enabled=enable_memory, db_path=memory_db)
+        )
+
+        # LLM & Conversation
+        intel_cfg = IntelligenceConfig(llm_provider=llm_provider)
+        llm_reasoner = create_llm_provider(intel_cfg)
+
+        self.conversation_engine = ConversationEngine(
+            context_manager=self.context_manager,
+            knowledge_retriever=self.knowledge_retriever,
+            rag_engine=self.rag_engine,
+            memory=self.episodic_memory,
+            llm_provider=llm_reasoner,
+        )
+
+        # Tracking state
+        self._tracking_enabled = True
+        self._enable_memory = enable_memory
+        self._enable_rag = enable_rag
+
+        # Camera / synthetic
+        self._camera: Optional[CameraAdapter] = None
+        self._use_synthetic = False
+        self._pipeline_thread: Optional[threading.Thread] = None
+
+        # OCR cache
+        self._last_ocr_texts: List[TextDetection] = []
+
+        logger.info("AURA Pipeline Bridge initialized successfully.")
+
+    def _init_camera(self) -> None:
+        """Initializes camera or synthetic frame source."""
+        if self.source.lower() == "synthetic":
+            self._use_synthetic = True
+            logger.info("Using synthetic frame generator for dashboard.")
+            return
+
+        source_target = int(self.source) if self.source.isdigit() else self.source
+        try:
+            self._camera = CameraAdapter(
+                source=source_target, width=self.width, height=self.height,
+            )
+            self._camera.open()
+            logger.info(f"Camera connected: '{source_target}'")
+        except CameraNotFoundError:
+            logger.warning("Camera not found. Falling back to synthetic frames.")
+            self._use_synthetic = True
+
+    def _create_synthetic_frame(self, idx: int) -> Frame:
+        """Generates a synthetic test frame with moving shapes."""
+        img = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+        # Gradient background
+        for y in range(self.height):
+            img[y, :, 0] = int(20 + 40 * (y / self.height))
+            img[y, :, 1] = int(20 + 20 * (y / self.height))
+            img[y, :, 2] = int(40 + 60 * (y / self.height))
+
+        # Moving person-like rectangle
+        cx = int(200 + 100 * np.sin(idx * 0.05))
+        cv2.rectangle(img, (cx - 40, 100), (cx + 40, 340), (60, 180, 75), -1)
+        cv2.circle(img, (cx, 80), 30, (60, 180, 75), -1)
+
+        # Moving notebook
+        nx = int(420 + 50 * np.cos(idx * 0.03))
+        cv2.rectangle(img, (nx - 60, 260), (nx + 60, 380), (180, 100, 40), -1)
+        cv2.putText(
+            img, "AURA MANUAL", (nx - 50, 325),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1,
+        )
+
+        return Frame(
+            image=img,
+            timestamp=time.time(),
+            source_id="synthetic",
+        )
+
+    def _pipeline_loop(self) -> None:
+        """Main vision pipeline loop running in a background thread."""
+        self._init_camera()
+        frame_count = 0
+        fps_ema = 0.0
+        alpha = 0.1
+
+        logger.info("Pipeline loop started.")
+
+        while self._running:
+            t0 = time.perf_counter()
+
+            # 1. Capture frame
+            if self._use_synthetic:
+                frame = self._create_synthetic_frame(frame_count)
+            else:
+                frame = self._camera.read()
+                if frame is None:
+                    logger.info("Camera stream ended.")
+                    break
+
+            # 2. Detect
+            detections = self.detector.detect(frame)
+            t_infer = time.perf_counter()
+            infer_latency_ms = (t_infer - t0) * 1000.0
+
+            # 3. Track
+            tracks_map: Dict[int, Any] = {}
+            if self._tracking_enabled:
+                detections = self.tracker.update(detections)
+                tracks_map = {t.track_id: t for t in self.tracker.all_tracks}
+
+            # 4. Feature extraction & ANN reliability
+            features = (
+                self.feature_builder.extract_all(
+                    frame, detections, tracks_map=tracks_map,
+                )
+                if detections else []
+            )
+            if features:
+                for i, feat in enumerate(features):
+                    rel_res = self.reliability_ann.predict(feat)
+                    detections[i].reliability_score = rel_res.score
+                    detections[i].reliability_label = rel_res.label
+
+            # 5. Periodic OCR
+            if (
+                self.ocr_engine is not None
+                and (frame_count % max(1, self.ocr_stride) == 0)
+            ):
+                self._last_ocr_texts = self.ocr_engine.extract_text(frame)
+
+            # 6. Context update
+            object_texts_map: Dict[int, List[TextDetection]] = {}
+            if self.ocr_engine is not None and self._last_ocr_texts:
+                object_texts_map = self.ocr_engine.extract_text_for_detections(
+                    self._last_ocr_texts, detections,
+                )
+
+            scene_context = self.context_manager.update(
+                detections=detections,
+                text_detections=self._last_ocr_texts,
+                object_texts=object_texts_map,
+                frame_shape=frame.shape,
+            )
+
+            # 7. Record memory
+            if self._enable_memory and self.episodic_memory:
+                self.episodic_memory.record_scene(scene_context)
+
+            # 8. Annotate frame
+            annotated = self.detector.annotate(frame, detections)
+            if self.ocr_engine is not None and self._last_ocr_texts:
+                annotated = draw_text_annotations(annotated, self._last_ocr_texts)
+
+            # 9. Encode to JPEG
+            _, jpeg_buf = cv2.imencode(
+                ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75],
+            )
+
+            # 10. FPS
+            loop_time = time.perf_counter() - t0
+            current_fps = 1.0 / max(loop_time, 1e-6)
+            fps_ema = (
+                current_fps if frame_count == 0
+                else (alpha * current_fps + (1 - alpha) * fps_ema)
+            )
+
+            active_tracks = (
+                len(self.tracker.active_tracks) if self._tracking_enabled else 0
+            )
+            ocr_count = (
+                len(self._last_ocr_texts) if self.ocr_engine is not None else 0
+            )
+            sahi_active = bool(
+                self.detector.sahi_config and self.detector.sahi_config.enabled
+            )
+
+            # 11. Update buffered state (thread-safe)
+            with self._lock:
+                self._latest_annotated_jpeg = jpeg_buf.tobytes()
+                self._latest_scene = scene_context
+                self._latest_detections = list(detections)
+                self._telemetry = TelemetrySnapshot(
+                    fps=fps_ema,
+                    inference_latency_ms=infer_latency_ms,
+                    frame_count=frame_count,
+                    active_tracks=active_tracks,
+                    detection_count=len(detections),
+                    ocr_text_count=ocr_count,
+                    sahi_enabled=sahi_active,
+                    tracking_enabled=self._tracking_enabled,
+                    ann_version=self.reliability_ann.model_version,
+                    memory_enabled=self._enable_memory,
+                    rag_enabled=self._enable_rag,
+                )
+
+            frame_count += 1
+
+            # Throttle to ~30 FPS max to avoid burning CPU
+            elapsed = time.perf_counter() - t0
+            target_interval = 1.0 / 30.0
+            if elapsed < target_interval:
+                time.sleep(target_interval - elapsed)
+
+        logger.info("Pipeline loop stopped.")
+
+    # ── Public API (thread-safe) ──
+
+    def start(self) -> None:
+        """Starts the pipeline in a background thread."""
+        if self._running:
+            logger.warning("Pipeline already running.")
+            return
+        self._running = True
+        self._pipeline_thread = threading.Thread(
+            target=self._pipeline_loop, daemon=True, name="AURA_Pipeline",
+        )
+        self._pipeline_thread.start()
+        logger.info("Pipeline background thread started.")
+
+    def stop(self) -> None:
+        """Stops the pipeline."""
+        self._running = False
+        if self._pipeline_thread:
+            self._pipeline_thread.join(timeout=5.0)
+        if self._camera:
+            self._camera.release()
+        if self._enable_memory and self.episodic_memory:
+            self.episodic_memory.close()
+        logger.info("Pipeline stopped and cleaned up.")
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    def get_frame_jpeg(self) -> Optional[bytes]:
+        """Returns the latest annotated frame as JPEG bytes."""
+        with self._lock:
+            return self._latest_annotated_jpeg
+
+    def get_frame_base64(self) -> Optional[str]:
+        """Returns the latest annotated frame as base64-encoded JPEG string."""
+        jpeg = self.get_frame_jpeg()
+        if jpeg:
+            return base64.b64encode(jpeg).decode("ascii")
+        return None
+
+    def get_scene(self) -> Optional[Dict[str, Any]]:
+        """Returns the latest scene context as a serializable dict."""
+        with self._lock:
+            scene = self._latest_scene
+        if not scene:
+            return None
+        return {
+            "timestamp": round(scene.timestamp, 2),
+            "frame_index": scene.frame_index,
+            "entity_count": scene.num_entities,
+            "entities": [e.to_dict() for e in scene.entities],
+            "texts": [t.to_dict() for t in scene.all_texts],
+            "relations": [
+                {"sentence": r.to_sentence()} for r in scene.spatial_relations
+            ],
+            "summary": scene.summary(),
+            "frame_shape": list(scene.frame_shape),
+        }
+
+    def get_telemetry(self) -> Dict[str, Any]:
+        """Returns a telemetry snapshot dict."""
+        with self._lock:
+            return self._telemetry.to_dict()
+
+    def get_detections(self) -> List[Dict[str, Any]]:
+        """Returns the latest detections as a list of dicts."""
+        with self._lock:
+            return [d.to_dict() for d in self._latest_detections]
+
+    def send_chat(self, query: str) -> Dict[str, Any]:
+        """Processes a chat query through the conversation engine."""
+        response = self.conversation_engine.respond(query)
+        return response.to_dict()
+
+    def search_rag(self, query: str, top_k: int = 3) -> Dict[str, Any]:
+        """Searches RAG documents."""
+        result = self.rag_engine.query(query, top_k=top_k)
+        return result.to_dict()
+
+    def search_memory(self, query: str) -> Dict[str, Any]:
+        """Searches episodic memory for an object."""
+        event = self.episodic_memory.find_last_seen(query)
+        if event:
+            return {
+                "found": True,
+                "description": event.describe(),
+                "event": event.to_dict(),
+            }
+        return {
+            "found": False,
+            "description": f"No memory record found for '{query}'.",
+            "event": None,
+        }
+
+    def get_memory_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Returns recent episodic memory events."""
+        if not self._enable_memory:
+            return []
+        # Query common object classes
+        all_events = []
+        for cls in ["person", "laptop", "notebook", "phone", "cup", "bottle", "book"]:
+            events = self.episodic_memory.get_history(cls, limit=5)
+            all_events.extend(events)
+        # Sort by timestamp descending, dedupe by id
+        seen_ids = set()
+        unique = []
+        for e in sorted(all_events, key=lambda x: x.timestamp, reverse=True):
+            if e.id not in seen_ids:
+                seen_ids.add(e.id)
+                unique.append(e.to_dict())
+        return unique[:limit]
+
+    def get_rag_documents(self) -> List[Dict[str, Any]]:
+        """Returns list of all indexed RAG documents."""
+        if not self.rag_engine.is_available:
+            return []
+        docs = list(self.rag_engine.vector_store.documents.values())
+        return [d.to_dict() for d in docs]
+
+    def toggle_sahi(self) -> bool:
+        """Toggles SAHI on/off and returns new state."""
+        if self.detector.sahi_config and self.detector.sahi_config.enabled:
+            self.detector.disable_sahi()
+            return False
+        else:
+            self.detector.enable_sahi()
+            return True
+
+    def toggle_tracking(self) -> bool:
+        """Toggles tracking on/off and returns new state."""
+        self._tracking_enabled = not self._tracking_enabled
+        return self._tracking_enabled
+
+    def get_status(self) -> Dict[str, Any]:
+        """Returns overall system status."""
+        return {
+            "version": "0.9.0",
+            "pipeline_running": self._running,
+            "source": self.source,
+            "tracking_enabled": self._tracking_enabled,
+            "sahi_enabled": bool(
+                self.detector.sahi_config and self.detector.sahi_config.enabled
+            ),
+            "ocr_enabled": self.ocr_engine is not None,
+            "rag_enabled": self._enable_rag,
+            "memory_enabled": self._enable_memory,
+            "ann_version": self.reliability_ann.model_version,
+            "rag_document_count": self.rag_engine.vector_store.count,
+        }
