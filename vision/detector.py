@@ -1,6 +1,7 @@
 """
 AURA Vision Detector Module
-Provides pretrained YOLO-based object detection, structured detection outputs, and frame annotation.
+Provides pretrained YOLO-based object detection, structured detection outputs,
+geometric anomaly suppression (filtering hands as person, books as laptop), and frame annotation.
 """
 
 import os
@@ -130,18 +131,6 @@ def draw_detections(
 ) -> np.ndarray:
     """
     Renders structured detections on an image frame with clean bounding boxes and badges.
-    
-    Args:
-        image: Original BGR image numpy array.
-        detections: List of Detection objects.
-        show_labels: Whether to render class names.
-        show_conf: Whether to render confidence percentages.
-        box_thickness: Thickness of bounding box borders.
-        font_scale: Scale factor for label text.
-        font_thickness: Thickness of label text.
-        
-    Returns:
-        np.ndarray: Annotated BGR image.
     """
     annotated = image.copy()
     img_h, img_w = annotated.shape[:2]
@@ -159,14 +148,14 @@ def draw_detections(
 
         # Build label text
         parts = []
+        if det.track_id is not None:
+            parts.append(f"#{det.track_id}")
         if show_labels:
             parts.append(det.class_name)
         if show_conf:
             parts.append(f"{det.confidence * 100:.1f}%")
         if det.reliability_label is not None:
             parts.append(f"({det.reliability_label})")
-        if det.track_id is not None:
-            parts.insert(0, f"#{det.track_id}")
 
         if parts:
             label = " ".join(parts)
@@ -174,7 +163,6 @@ def draw_detections(
                 label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness
             )
             
-            # Position badge above bbox, or inside if near top edge
             badge_y1 = max(0, y1 - text_h - baseline - 4)
             badge_y2 = y1 if y1 - text_h - baseline - 4 >= 0 else y1 + text_h + baseline + 4
             badge_x2 = min(img_w - 1, x1 + text_w + 6)
@@ -210,38 +198,29 @@ def draw_detections(
 class ObjectDetector:
     """
     Vision Engine object detector wrapping pretrained Ultralytics YOLO models.
-    Loads model once during initialization and processes frames into structured Detections.
+    Includes built-in geometric anomaly filtering to eliminate false positives.
     """
 
     def __init__(
         self,
-        model_name: str = "yolo11n.pt",
-        confidence_threshold: float = 0.25,
+        model_name: str = "yolo11m.pt",
+        confidence_threshold: float = 0.40,
         iou_threshold: float = 0.45,
         device: str = "auto",
         half: bool = False,
+        enable_geometric_filter: bool = True,
     ):
-        """
-        Initializes the YOLO object detector.
-        
-        Args:
-            model_name: Name or path of pretrained YOLO weights (e.g. 'yolo11n.pt', 'yolov8n.pt').
-            confidence_threshold: Default minimum confidence score to retain detections.
-            iou_threshold: NMS IoU threshold.
-            device: Device target ('cpu', 'cuda', 'auto', etc.).
-            half: Whether to use half-precision FP16.
-        """
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.device = device
         self.half = half
+        self.enable_geometric_filter = enable_geometric_filter
         self._model: Optional[YOLO] = None
         self._load_model()
 
     def _load_model(self) -> None:
         """Loads the YOLO model instance once during initialization."""
-        # Check if weights exist in models/ subfolder or as specified
         resolved_path = self.model_name
         if not os.path.isabs(resolved_path) and not os.path.exists(resolved_path):
             models_dir_path = os.path.join("models", resolved_path)
@@ -265,6 +244,54 @@ class ObjectDetector:
             return self._model.names
         return {}
 
+    def _filter_geometric_anomalies(
+        self,
+        detections: List[Detection],
+        img_w: int,
+        img_h: int,
+    ) -> List[Detection]:
+        """
+        Suppresses common false positive classifications using spatial and anatomical heuristics:
+        1. Hands / Arms misclassified as 'person' (tiny area or extreme horizontal aspect ratio).
+        2. Flat binders / notebooks misclassified as 'laptop'.
+        3. Tiny noisy bounding boxes (< 150 px).
+        """
+        frame_area = float(img_w * img_h)
+        clean_detections: List[Detection] = []
+
+        for d in detections:
+            w = d.width
+            h = d.height
+            area = d.area
+            norm_area = area / max(frame_area, 1.0)
+            aspect_ratio = (w / h) if h > 1e-5 else 1.0
+
+            # Filter 1: Discard micro-noise (< 150 pixels)
+            if area < 150.0:
+                continue
+
+            # Filter 2: Person Anomaly Suppression (Rules out hands / skin patches)
+            if d.class_name.lower() == "person":
+                # A person cannot be tiny (< 1.5% of camera frame) unless confidence > 0.88
+                if norm_area < 0.015 and d.confidence < 0.88:
+                    continue
+                # A person is vertically oriented; horizontal boxes (w > 2.2 * h) are hands/arms
+                if aspect_ratio > 2.2 and d.confidence < 0.85:
+                    continue
+
+            # Filter 3: Laptop Anomaly Suppression (Rules out small notebooks/books/paper sheets)
+            elif d.class_name.lower() == "laptop":
+                # Laptop screen + base requires reasonable area (> 2.5% of frame)
+                if norm_area < 0.025 and d.confidence < 0.75:
+                    continue
+                # Laptops are typically horizontal or square, not extreme vertical slivers
+                if (aspect_ratio < 0.45 or aspect_ratio > 3.0) and d.confidence < 0.80:
+                    continue
+
+            clean_detections.append(d)
+
+        return clean_detections
+
     def detect(
         self,
         frame: Union[np.ndarray, Frame],
@@ -273,14 +300,6 @@ class ObjectDetector:
     ) -> List[Detection]:
         """
         Performs object detection on a single frame.
-        
-        Args:
-            frame: Either an OpenCV BGR numpy array or an AURA Frame object.
-            conf_threshold: Optional override for the detection confidence threshold.
-            classes: Optional list of class IDs to filter for.
-            
-        Returns:
-            List[Detection]: List of structured Detection objects.
         """
         if self._model is None:
             raise DetectorError("Detector model is not loaded.")
@@ -316,9 +335,9 @@ class ObjectDetector:
             return detections
 
         boxes = result.boxes
-        xyxy = boxes.xyxy.cpu().numpy()  # [N, 4]
-        confs = boxes.conf.cpu().numpy()  # [N]
-        cls_ids = boxes.cls.cpu().numpy().astype(int)  # [N]
+        xyxy = boxes.xyxy.cpu().numpy()
+        confs = boxes.conf.cpu().numpy()
+        cls_ids = boxes.cls.cpu().numpy().astype(int)
 
         for i in range(len(cls_ids)):
             c_id = int(cls_ids[i])
@@ -334,6 +353,10 @@ class ObjectDetector:
                     bbox=c_bbox,
                 )
             )
+
+        if self.enable_geometric_filter:
+            img_h, img_w = img.shape[:2]
+            detections = self._filter_geometric_anomalies(detections, img_w, img_h)
 
         return detections
 
