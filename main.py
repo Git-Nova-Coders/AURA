@@ -1,7 +1,12 @@
 """
 AURA - Adaptive Understanding and Reasoning Architecture
+<<<<<<< Updated upstream
 Milestone 7: Multimodal Visual Intelligence Assistant
 (Camera -> YOLO Detection -> Multi-Object Tracking -> OCR -> Reliability ANN -> Context Manager -> Knowledge Retrieval -> Conversational Reasoning -> Voice STT/TTS)
+=======
+Milestone 5: Multi-Object Tracking, Optical Character Recognition (OCR), & SAHI Sliced Inference
+(Camera -> OpenCV -> Decoupled Real-Time Threading -> SAHI/YOLO Detection -> Tracker -> OCR -> Reliability ANN)
+>>>>>>> Stashed changes
 
 Entry point for running live detection, tracking, OCR, feature extraction,
 knowledge lookups, natural-language visual reasoning, and voice interaction.
@@ -16,6 +21,7 @@ from typing import Optional, List, Dict, Any
 import cv2
 import numpy as np
 
+from config.config import SAHIConfig
 from vision.camera import CameraAdapter, CameraNotFoundError, Frame
 from vision.detector import ObjectDetector, ModelLoadError, Detection
 from vision.tracker import ObjectTracker
@@ -42,7 +48,11 @@ logger = logging.getLogger("AURA.Main")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
+<<<<<<< Updated upstream
         description="AURA Visual Intelligence Assistant - Milestones 6 & 7 (Intelligence & Voice)"
+=======
+        description="AURA Visual Intelligence Assistant - Tracking, OCR & SAHI Sliced Inference"
+>>>>>>> Stashed changes
     )
     parser.add_argument(
         "--source",
@@ -174,6 +184,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force synchronous single-threaded execution.",
     )
+    parser.add_argument(
+        "--sahi",
+        action="store_true",
+        help="Enable Slicing Aided Hyper Inference (SAHI) for fine-grained small object detection.",
+    )
+    parser.add_argument(
+        "--slice-size",
+        type=int,
+        default=320,
+        help="SAHI slice window dimension (square tile size in pixels). Default: 320",
+    )
+    parser.add_argument(
+        "--slice-overlap",
+        type=float,
+        default=0.20,
+        help="SAHI slice horizontal/vertical overlap ratio in range [0.0, 0.8]. Default: 0.20",
+    )
     return parser.parse_args()
 
 
@@ -209,6 +236,7 @@ def draw_hud(
     tracking_enabled: bool = True,
     active_tracks: int = 0,
     ocr_texts_count: int = -1,
+    sahi_enabled: bool = False,
     ann_version: Optional[str] = None,
     voice_status: str = "IDLE",
     last_subtitle: Optional[str] = None,
@@ -222,12 +250,18 @@ def draw_hud(
 
     track_str = f"Tracks: {active_tracks}" if tracking_enabled else "Tracking: OFF"
     ocr_str = f" | OCR: {ocr_texts_count}" if ocr_texts_count >= 0 else ""
+    sahi_str = " | SAHI: ON" if sahi_enabled else ""
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
 
     hud_text = (
+<<<<<<< Updated upstream
         f"AURA v0.7 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
         f"Detections: {num_detections} | {track_str}{ocr_str}{ann_str}{voice_badge}"
+=======
+        f"AURA v0.5 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
+        f"Detections: {num_detections} | {track_str}{sahi_str}{ocr_str}{ann_str}"
+>>>>>>> Stashed changes
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -291,10 +325,22 @@ def run_pipeline(
     enable_tts: bool = True,
     one_shot_query: Optional[str] = None,
     enable_chat_loop: bool = False,
+    enable_sahi: bool = False,
+    slice_size: int = 320,
+    slice_overlap: float = 0.20,
 ) -> int:
-    """Main execution loop for AURA Milestones 6 & 7."""
+    """Main execution loop for AURA Milestones 6 & 7 with SAHI."""
     source_target = int(source_val) if source_val.isdigit() else source_val
     classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
+
+    # SAHI Configuration
+    sahi_config = SAHIConfig(
+        enabled=enable_sahi,
+        slice_width=slice_size,
+        slice_height=slice_size,
+        overlap_width_ratio=slice_overlap,
+        overlap_height_ratio=slice_overlap,
+    )
 
     # 1. Initialize ObjectDetector
     logger.info("Initializing ObjectDetector...")
@@ -304,6 +350,7 @@ def run_pipeline(
             confidence_threshold=conf_thresh,
             device=device,
             custom_classes=classes_list,
+            sahi_config=sahi_config,
         )
     except ModelLoadError as e:
         logger.error(f"Detector initialization failed: {e}")
@@ -437,8 +484,13 @@ def run_pipeline(
         infer_thread = threading.Thread(target=inference_worker, daemon=True)
         infer_thread.start()
 
+<<<<<<< Updated upstream
     logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
     logger.info("Controls: 'v'=Voice Push-to-Talk, 'c'=Console Query, 'k'=Object Knowledge, 'i'=Scene Info, 'm'=Memory, 't'=Toggle Tracker, 'o'=Scan OCR")
+=======
+    logger.info("Starting visual processing loop. Press 'q' or ESC in window to exit...")
+    logger.info("Controls: 'q'=Quit, 's'=Save, 'c'=Detections, 'f'=Features, 't'=Tracker, 'o'=Scan OCR, 'h'=Toggle SAHI")
+>>>>>>> Stashed changes
 
     try:
         while True:
@@ -522,10 +574,14 @@ def run_pipeline(
 
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
             ocr_count = len(last_ocr_texts) if ocr_engine is not None else -1
+<<<<<<< Updated upstream
             v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
 
             with subtitle_lock:
                 sub_text = current_subtitle
+=======
+            sahi_is_active = bool(detector.sahi_config and detector.sahi_config.enabled)
+>>>>>>> Stashed changes
 
             annotated_frame = draw_hud(
                 annotated_frame,
@@ -536,6 +592,7 @@ def run_pipeline(
                 tracking_enabled=tracking_active,
                 active_tracks=active_tracks_count,
                 ocr_texts_count=ocr_count,
+                sahi_enabled=sahi_is_active,
                 ann_version=reliability_ann.model_version,
                 voice_status=v_status,
                 last_subtitle=sub_text,
@@ -600,6 +657,11 @@ def run_pipeline(
                 elif key in (ord('t'), ord('T')):
                     tracking_active = not tracking_active
                     logger.info(f"Tracking toggled: {'ENABLED' if tracking_active else 'DISABLED'}")
+                elif key in (ord('h'), ord('H'), ord('i'), ord('I')):
+                    if detector.sahi_config and detector.sahi_config.enabled:
+                        detector.disable_sahi()
+                    else:
+                        detector.enable_sahi(SAHIConfig(enabled=True, slice_width=slice_size, slice_height=slice_size, overlap_width_ratio=slice_overlap, overlap_height_ratio=slice_overlap))
                 elif key in (ord('o'), ord('O')):
                     logger.info(f"Triggering instant OCR scan on frame {frame_count}...")
                     if ocr_engine is None:
@@ -671,6 +733,9 @@ def main():
         enable_tts=not args.no_tts,
         one_shot_query=args.query,
         enable_chat_loop=args.chat,
+        enable_sahi=args.sahi,
+        slice_size=args.slice_size,
+        slice_overlap=args.slice_overlap,
     )
 
 
