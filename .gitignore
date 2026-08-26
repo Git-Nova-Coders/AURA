@@ -31,4 +31,6 @@ data/processed/
 logs/
 aura_capture_*.jpg
 *.avi
+*.db
+data/*.db
 

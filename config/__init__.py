@@ -14,6 +14,8 @@ from .config import (
     AnnConfig,
     KnowledgeConfig,
     IntelligenceConfig,
+    RAGConfig,
+    MemoryConfig,
     VoiceConfig,
 )
 
@@ -29,5 +31,7 @@ __all__ = [
     "AnnConfig",
     "KnowledgeConfig",
     "IntelligenceConfig",
+    "RAGConfig",
+    "MemoryConfig",
     "VoiceConfig",
 ]

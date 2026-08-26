@@ -17,6 +17,9 @@ class IntentType(Enum):
     OBJECT_COUNT = "object_count"
     OCR_READ = "ocr_read"
     RELIABILITY_CHECK = "reliability_check"
+    MEMORY_SPATIAL = "memory_spatial"
+    MEMORY_TEMPORAL = "memory_temporal"
+    DOCUMENT_RAG = "document_rag"
     GENERAL_QA = "general_qa"
     VOICE_CONTROL = "voice_control"
 
@@ -48,10 +51,10 @@ class IntentClassifier:
     """
 
     KNOWN_OBJECTS = [
-        "person", "laptop", "cell phone", "phone", "mouse", "keyboard", "book",
-        "bottle", "cup", "chair", "tv", "monitor", "backpack", "pen", "notebook",
+        "person", "laptop", "cell phone", "phone", "smartphone", "mouse", "keyboard", "book",
+        "bottle", "cup", "chair", "tv", "monitor", "backpack", "pen", "pencil", "notebook",
         "clock", "vase", "potted plant", "plant", "dining table", "table", "desk",
-        "it", "that", "this", "object"
+        "headphones", "glasses", "water bottle", "handbag", "it", "that", "this", "object"
     ]
 
     def classify(self, query: str) -> ParsedQuery:
@@ -68,7 +71,7 @@ class IntentClassifier:
         spatial_kws = ["left", "right", "center", "middle", "top", "bottom"]
         spatial_keyword = next((kw for kw in spatial_kws if re.search(r"\b" + kw + r"\b", q)), None)
 
-        # Extract target object (sort longer names first to match 'cell phone' before 'phone')
+        # Extract target object (sort longer names first to match 'water bottle' before 'bottle')
         target_object = None
         if "people" in q:
             target_object = "person"
@@ -80,7 +83,7 @@ class IntentClassifier:
                     break
 
         # 1. Voice control intent
-        control_phrases = ["stop listening", "mute", "unmute", "clear memory", "toggle tracking"]
+        control_phrases = ["stop listening", "mute", "unmute", "clear memory", "toggle tracking", "toggle sahi"]
         if any(cp in q for cp in control_phrases):
             return ParsedQuery(
                 raw_query=query,
@@ -90,7 +93,49 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 2. OCR / Reading intent
+        # 2. Episodic Memory Spatial intent ("where was", "where did i leave", "where did i put")
+        mem_spatial_phrases = [
+            "where was", "where did i leave", "where did i put", "where did i place",
+            "last seen location", "where was my", "where was the"
+        ]
+        if any(msp in q for msp in mem_spatial_phrases):
+            return ParsedQuery(
+                raw_query=query,
+                intent=IntentType.MEMORY_SPATIAL,
+                target_object=target_object,
+                spatial_keyword=spatial_keyword,
+                track_id=track_id,
+            )
+
+        # 3. Episodic Memory Temporal intent ("when was", "when did", "how long ago")
+        mem_temporal_phrases = [
+            "when was", "when did", "last time i saw", "how long ago was", "when did someone", "when did a"
+        ]
+        if any(mtp in q for mtp in mem_temporal_phrases):
+            return ParsedQuery(
+                raw_query=query,
+                intent=IntentType.MEMORY_TEMPORAL,
+                target_object=target_object,
+                spatial_keyword=spatial_keyword,
+                track_id=track_id,
+            )
+
+        # 4. Document RAG intent ("how to use", "manual for", "instructions for", "safety guidelines")
+        rag_phrases = [
+            "how to use", "how do i use", "how do i operate", "user manual", "manual for",
+            "safety instructions", "instructions for", "operating instructions", "guidelines for",
+            "how to turn on", "how to clean", "ergonomic"
+        ]
+        if any(rp in q for rp in rag_phrases):
+            return ParsedQuery(
+                raw_query=query,
+                intent=IntentType.DOCUMENT_RAG,
+                target_object=target_object,
+                spatial_keyword=spatial_keyword,
+                track_id=track_id,
+            )
+
+        # 5. OCR / Reading intent
         ocr_phrases = [
             "read", "what does the text say", "read text", "read the words",
             "what is written", "read the book", "read the title", "transcribe"
@@ -104,7 +149,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 3. Object Count intent
+        # 6. Object Count intent
         count_phrases = ["how many", "count the", "count how many", "number of"]
         if any(cp in q for cp in count_phrases):
             return ParsedQuery(
@@ -115,7 +160,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 4. Object Location intent
+        # 7. Object Location intent
         location_phrases = ["where is", "where are", "locate", "find the", "which side is"]
         if any(lp in q for lp in location_phrases):
             return ParsedQuery(
@@ -126,7 +171,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 5. Reliability Check intent
+        # 8. Reliability Check intent
         rel_phrases = ["reliable", "reliability", "how confident", "is that certain", "accuracy"]
         if any(rp in q for rp in rel_phrases):
             return ParsedQuery(
@@ -137,7 +182,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 6. Scene Summary intent
+        # 9. Scene Summary intent
         summary_phrases = [
             "what do you see", "describe the scene", "what is in front of me",
             "what is visible", "give me a summary", "what's here", "look around",
@@ -152,7 +197,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 7. Object Info intent
+        # 10. Object Info intent
         info_phrases = [
             "what is this", "what is that", "tell me about", "what's that",
             "explain the", "information about", "info on", "details about", "what kind of"
@@ -166,7 +211,7 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 8. Default to General Visual QA
+        # 11. Default to General Visual QA
         return ParsedQuery(
             raw_query=query,
             intent=IntentType.GENERAL_QA,
