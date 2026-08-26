@@ -2,11 +2,12 @@
 AURA Vision Pipeline Module
 Provides a high-level, decoupled pipeline and generator interface for downstream modules
 (Reliability ANN, Interface UI, Knowledge Engine, Context Manager).
+Integrates YOLO object detection, multi-object tracking (M5), and OCR (M5).
 """
 
 import time
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Union, Generator, Dict, Any
 import numpy as np
 
@@ -14,6 +15,8 @@ from config.config import AuraConfig
 from .camera import CameraAdapter, Frame
 from .detector import ObjectDetector, Detection
 from .features import FeatureBuilder, DetectionFeatures
+from .tracker import ObjectTracker
+from ocr.engine import OCREngine, TextDetection, draw_text_annotations
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +33,16 @@ class PipelineResult:
     annotated_frame: Optional[np.ndarray] = None
     fps: float = 0.0
     latency_ms: float = 0.0
+    text_detections: List[TextDetection] = field(default_factory=list)
+    object_texts: Dict[int, List[TextDetection]] = field(default_factory=dict)
 
     @property
     def num_detections(self) -> int:
         return len(self.detections)
+
+    @property
+    def num_texts(self) -> int:
+        return len(self.text_detections)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the entire perception result into a JSON-compatible dictionary."""
@@ -42,17 +51,19 @@ class PipelineResult:
             "source_id": self.frame.source_id,
             "frame_shape": list(self.frame.shape),
             "num_detections": self.num_detections,
+            "num_texts": self.num_texts,
             "fps": round(self.fps, 1),
             "latency_ms": round(self.latency_ms, 2),
             "detections": [d.to_dict() for d in self.detections],
             "features": [f.to_dict() for f in self.features],
+            "texts": [t.to_dict() for t in self.text_detections],
         }
 
 
 class VisionPipeline:
     """
-    High-level orchestrator combining CameraAdapter, ObjectDetector, and FeatureBuilder.
-    Provides single-frame processing and real-time streaming generators.
+    High-level orchestrator combining CameraAdapter, ObjectDetector, ObjectTracker,
+    FeatureBuilder, Reliability ANN, and OCREngine.
     """
 
     def __init__(
@@ -61,10 +72,12 @@ class VisionPipeline:
         camera: Optional[CameraAdapter] = None,
         detector: Optional[ObjectDetector] = None,
         feature_builder: Optional[FeatureBuilder] = None,
+        tracker: Optional[ObjectTracker] = None,
+        ocr_engine: Optional[OCREngine] = None,
     ):
         self.config = config or AuraConfig()
 
-        # Initialize detector
+        # 1. Initialize detector
         self.detector = detector or ObjectDetector(
             model_name=self.config.vision.model_name,
             confidence_threshold=self.config.vision.confidence_threshold,
@@ -73,14 +86,39 @@ class VisionPipeline:
             half=self.config.vision.half,
         )
 
-        # Initialize feature builder
+        # 2. Initialize tracker
+        if tracker is not None:
+            self.tracker = tracker
+        elif self.config.tracker.enabled:
+            self.tracker = ObjectTracker(
+                max_age=self.config.tracker.max_age,
+                min_hits=self.config.tracker.min_hits,
+                iou_threshold=self.config.tracker.iou_threshold,
+            )
+        else:
+            self.tracker = None
+
+        # 3. Initialize OCR engine
+        if ocr_engine is not None:
+            self.ocr_engine = ocr_engine
+        elif self.config.ocr.enabled:
+            self.ocr_engine = OCREngine(
+                languages=self.config.ocr.languages,
+                confidence_threshold=self.config.ocr.confidence_threshold,
+                gpu=self.config.ocr.gpu,
+            )
+        else:
+            self.ocr_engine = None
+
+        # 4. Initialize feature builder
         self.feature_builder = feature_builder or FeatureBuilder(
             enable_blur=self.config.features.enable_blur,
             enable_brightness=self.config.features.enable_brightness,
             enable_contrast=self.config.features.enable_contrast,
+            enable_temporal=self.config.features.enable_temporal,
         )
 
-        # Initialize Reliability ANN
+        # 5. Initialize Reliability ANN
         from ann.inference import ReliabilityInference
         self.reliability_ann = ReliabilityInference(
             enabled=self.config.ann.enabled,
@@ -90,7 +128,7 @@ class VisionPipeline:
             device=self.config.ann.device,
         )
 
-        # Camera adapter (lazy-opened if streaming)
+        # 6. Camera adapter (lazy-opened if streaming)
         self.camera = camera or CameraAdapter(
             source=self.config.camera.source,
             width=self.config.camera.width,
@@ -100,12 +138,16 @@ class VisionPipeline:
 
         self._last_timestamp = time.perf_counter()
         self._fps_ema = 0.0
+        self._frame_index = 0
+        self._last_text_detections: List[TextDetection] = []
+        self._last_object_texts: Dict[int, List[TextDetection]] = {}
 
     def process_frame(
         self,
         frame: Union[np.ndarray, Frame],
         extract_features: bool = True,
         annotate: bool = True,
+        run_ocr: Optional[bool] = None,
     ) -> PipelineResult:
         """
         Runs the full perception pipeline on a single frame.
@@ -114,11 +156,13 @@ class VisionPipeline:
             frame: Numpy array or Frame object.
             extract_features: Whether to extract numerical features for detections.
             annotate: Whether to render bounding box annotations onto the frame.
+            run_ocr: Explicit override to run OCR on this frame. If None, uses config stride.
             
         Returns:
-            PipelineResult: Structured detections, features, and metadata.
+            PipelineResult: Structured detections, features, text, and metadata.
         """
         t0 = time.perf_counter()
+        self._frame_index += 1
 
         if isinstance(frame, np.ndarray):
             frame_obj = Frame(image=frame, timestamp=time.time(), source_id="direct_frame")
@@ -127,18 +171,37 @@ class VisionPipeline:
 
         # 1. Object Detection
         detections = self.detector.detect(frame_obj)
-        t_detect = time.perf_counter()
 
-        # 2. Feature Building & Reliability Estimation
+        # 2. Multi-Object Tracking (Persistent track IDs)
+        tracks_map: Dict[int, Any] = {}
+        if self.tracker is not None:
+            detections = self.tracker.update(detections)
+            tracks_map = {t.track_id: t for t in self.tracker.all_tracks}
+
+        # 3. Feature Building & Reliability Estimation
         features: List[DetectionFeatures] = []
         if extract_features and detections:
-            features = self.feature_builder.extract_all(frame_obj, detections)
+            features = self.feature_builder.extract_all(frame_obj, detections, tracks_map=tracks_map)
             for i, feat in enumerate(features):
                 rel_res = self.reliability_ann.predict(feat)
                 detections[i].reliability_score = rel_res.score
                 detections[i].reliability_label = rel_res.label
 
-        # 3. Annotation
+        # 4. OCR Extraction (Strided or on-demand)
+        should_run_ocr = run_ocr if run_ocr is not None else (
+            self.ocr_engine is not None and (self._frame_index % max(1, self.config.ocr.stride) == 0)
+        )
+
+        text_detections = self._last_text_detections
+        object_texts = self._last_object_texts
+
+        if should_run_ocr and self.ocr_engine is not None:
+            text_detections = self.ocr_engine.extract_text(frame_obj)
+            object_texts = self.ocr_engine.extract_text_for_detections(frame_obj.image, detections)
+            self._last_text_detections = text_detections
+            self._last_object_texts = object_texts
+
+        # 5. Annotation Rendering
         annotated: Optional[np.ndarray] = None
         if annotate:
             annotated = self.detector.annotate(
@@ -148,6 +211,9 @@ class VisionPipeline:
                 show_conf=self.config.display.show_conf,
                 box_thickness=self.config.display.box_thickness,
             )
+            # Render OCR annotations if enabled and texts found
+            if self.config.display.show_ocr and text_detections and annotated is not None:
+                annotated = draw_text_annotations(annotated, text_detections)
 
         t_end = time.perf_counter()
         latency_ms = (t_end - t0) * 1000.0
@@ -165,6 +231,8 @@ class VisionPipeline:
             annotated_frame=annotated,
             fps=self._fps_ema,
             latency_ms=latency_ms,
+            text_detections=text_detections,
+            object_texts=object_texts,
         )
 
     def stream(
