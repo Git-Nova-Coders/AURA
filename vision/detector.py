@@ -1,7 +1,7 @@
 """
 AURA Vision Detector Module
 Provides pretrained YOLO-based object detection, structured detection outputs,
-geometric anomaly suppression (filtering hands as person, books as laptop), and frame annotation.
+per-class confidence thresholds, geometric anomaly suppression, and frame annotation.
 """
 
 import os
@@ -15,6 +15,17 @@ from ultralytics import YOLO
 from .camera import Frame
 
 logger = logging.getLogger(__name__)
+
+# Class-specific confidence thresholds to suppress common hallucinations
+DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
+    "laptop": 0.55,      # Strict threshold to stop flat notebooks/binders/folders
+    "person": 0.45,      # Prevents floating hands/arms
+    "cell phone": 0.50,  # Prevents wallets/cards
+    "tv": 0.55,          # Prevents square wall pictures/posters
+    "book": 0.45,
+    "backpack": 0.45,
+    "handbag": 0.45,
+}
 
 
 @dataclass
@@ -198,17 +209,18 @@ def draw_detections(
 class ObjectDetector:
     """
     Vision Engine object detector wrapping pretrained Ultralytics YOLO models.
-    Includes built-in geometric anomaly filtering to eliminate false positives.
+    Includes per-class thresholds and geometric anomaly filtering to eliminate false positives.
     """
 
     def __init__(
         self,
-        model_name: str = "yolo11m.pt",
+        model_name: str = "yolo11s.pt",
         confidence_threshold: float = 0.40,
         iou_threshold: float = 0.45,
         device: str = "auto",
         half: bool = False,
         enable_geometric_filter: bool = True,
+        class_thresholds: Optional[Dict[str, float]] = None,
     ):
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
@@ -216,6 +228,7 @@ class ObjectDetector:
         self.device = device
         self.half = half
         self.enable_geometric_filter = enable_geometric_filter
+        self.class_thresholds = class_thresholds or DEFAULT_CLASS_THRESHOLDS
         self._model: Optional[YOLO] = None
         self._load_model()
 
@@ -252,9 +265,9 @@ class ObjectDetector:
     ) -> List[Detection]:
         """
         Suppresses common false positive classifications using spatial and anatomical heuristics:
-        1. Hands / Arms misclassified as 'person' (tiny area or extreme horizontal aspect ratio).
+        1. Hands / Arms misclassified as 'person' (small area or horizontal ratio).
         2. Flat binders / notebooks misclassified as 'laptop'.
-        3. Tiny noisy bounding boxes (< 150 px).
+        3. Micro noise boxes (< 150 px).
         """
         frame_area = float(img_w * img_h)
         clean_detections: List[Detection] = []
@@ -270,22 +283,27 @@ class ObjectDetector:
             if area < 150.0:
                 continue
 
-            # Filter 2: Person Anomaly Suppression (Rules out hands / skin patches)
+            # Filter 2: Person Anomaly Suppression (Rules out hands, wrists, skin patches)
             if d.class_name.lower() == "person":
-                # A person cannot be tiny (< 1.5% of camera frame) unless confidence > 0.88
-                if norm_area < 0.015 and d.confidence < 0.88:
+                # A full person cannot be a tiny patch (< 2% of frame) unless extreme high confidence
+                if norm_area < 0.02 and d.confidence < 0.88:
                     continue
-                # A person is vertically oriented; horizontal boxes (w > 2.2 * h) are hands/arms
-                if aspect_ratio > 2.2 and d.confidence < 0.85:
+                # A person is vertically oriented in webcam frames; horizontal boxes (w > 1.4 * h) are hands/arms
+                if aspect_ratio > 1.4 and d.confidence < 0.85:
                     continue
 
-            # Filter 3: Laptop Anomaly Suppression (Rules out small notebooks/books/paper sheets)
+            # Filter 3: Laptop Anomaly Suppression (Rules out small notebooks, paper sheets, books)
             elif d.class_name.lower() == "laptop":
-                # Laptop screen + base requires reasonable area (> 2.5% of frame)
-                if norm_area < 0.025 and d.confidence < 0.75:
+                # Laptops need reasonable area (> 3.5% of frame)
+                if norm_area < 0.035 and d.confidence < 0.78:
                     continue
-                # Laptops are typically horizontal or square, not extreme vertical slivers
-                if (aspect_ratio < 0.45 or aspect_ratio > 3.0) and d.confidence < 0.80:
+                # Laptops are rectangular/square; reject vertical slivers or long banners
+                if (aspect_ratio < 0.70 or aspect_ratio > 2.4) and d.confidence < 0.80:
+                    continue
+
+            # Filter 4: Cell Phone Anomaly Suppression (Rules out cards, cups)
+            elif d.class_name.lower() == "cell phone":
+                if norm_area > 0.30:  # Phones are not 30%+ of the camera frame
                     continue
 
             clean_detections.append(d)
@@ -309,11 +327,11 @@ class ObjectDetector:
             logger.warning("Received empty or invalid image frame for detection.")
             return []
 
-        conf = conf_threshold if conf_threshold is not None else self.confidence_threshold
+        base_conf = conf_threshold if conf_threshold is not None else self.confidence_threshold
 
         predict_kwargs: Dict[str, Any] = {
             "source": img,
-            "conf": conf,
+            "conf": max(0.15, base_conf - 0.15),  # Predict with lower floor then apply per-class thresholds
             "iou": self.iou_threshold,
             "verbose": False,
         }
@@ -344,6 +362,11 @@ class ObjectDetector:
             c_name = self.class_names.get(c_id, str(c_id))
             c_conf = float(confs[i])
             c_bbox = [float(xyxy[i][0]), float(xyxy[i][1]), float(xyxy[i][2]), float(xyxy[i][3])]
+
+            # Check per-class threshold
+            class_req_conf = self.class_thresholds.get(c_name.lower(), base_conf)
+            if c_conf < class_req_conf:
+                continue
 
             detections.append(
                 Detection(
