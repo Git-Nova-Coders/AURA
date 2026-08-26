@@ -18,6 +18,7 @@ from .features import DetectionFeatures, FeatureBuilder
 from .tracker import ObjectTracker, TrackedObject, compute_iou
 from .pipeline import VisionPipeline, PipelineResult
 from .dataset_collector import DatasetCollector, LabeledFeatureSample
+from .sahi import SlicedInferenceEngine, SliceWindow, generate_slice_grid, apply_nms_merging
 
 __all__ = [
     "Frame",
@@ -39,4 +40,8 @@ __all__ = [
     "PipelineResult",
     "DatasetCollector",
     "LabeledFeatureSample",
+    "SlicedInferenceEngine",
+    "SliceWindow",
+    "generate_slice_grid",
+    "apply_nms_merging",
 ]
