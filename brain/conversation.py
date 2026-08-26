@@ -1,7 +1,7 @@
 """
-AURA Conversation & Reasoning Engine (Milestone 6)
-Coordinates the Context Manager, Knowledge Retriever, and Intent Classifier
-to generate natural language responses grounded in real-time visual perception.
+AURA Conversation & Reasoning Engine (Milestones 6 & 8)
+Coordinates Context Manager, Knowledge Retriever, Episodic Memory, RAG Engine,
+and Pluggable LLM reasoning providers to generate grounded, intelligent multimodal responses.
 """
 
 import os
@@ -12,8 +12,11 @@ from typing import Optional, List, Dict, Any
 
 from knowledge.retriever import KnowledgeRetriever
 from knowledge.sources import KnowledgeItem
+from knowledge.rag import RAGEngine, RAGResult
 from .context import ContextManager, ObjectEntity, SceneContext
 from .intent import IntentClassifier, IntentType, ParsedQuery
+from .memory import EpisodicMemory, EpisodicEvent
+from .llm import BaseLLMProvider, OfflineReasoningProvider, create_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,8 @@ class ConversationResponse:
     response_text: str
     target_entity: Optional[ObjectEntity] = None
     knowledge_item: Optional[KnowledgeItem] = None
+    rag_result: Optional[RAGResult] = None
+    memory_event: Optional[EpisodicEvent] = None
     sources: List[str] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
 
@@ -38,6 +43,8 @@ class ConversationResponse:
             "response_text": self.response_text,
             "target_entity": self.target_entity.to_dict() if self.target_entity else None,
             "knowledge_item": self.knowledge_item.to_dict() if self.knowledge_item else None,
+            "rag_result": self.rag_result.to_dict() if self.rag_result else None,
+            "memory_event": self.memory_event.to_dict() if self.memory_event else None,
             "sources": self.sources,
             "timestamp": round(self.timestamp, 2),
         }
@@ -46,7 +53,7 @@ class ConversationResponse:
 class ConversationEngine:
     """
     Core reasoning and conversational intelligence engine for AURA.
-    Provides 100% offline grounded reasoning with optional pluggable LLM support.
+    Integrates real-time visual perception, episodic memory, document RAG, and LLM reasoning.
     """
 
     def __init__(
@@ -54,14 +61,20 @@ class ConversationEngine:
         context_manager: Optional[ContextManager] = None,
         knowledge_retriever: Optional[KnowledgeRetriever] = None,
         intent_classifier: Optional[IntentClassifier] = None,
+        rag_engine: Optional[RAGEngine] = None,
+        memory: Optional[EpisodicMemory] = None,
+        llm_provider: Optional[BaseLLMProvider] = None,
     ):
         self.context_manager = context_manager or ContextManager()
         self.knowledge_retriever = knowledge_retriever or KnowledgeRetriever()
         self.intent_classifier = intent_classifier or IntentClassifier()
+        self.rag_engine = rag_engine or RAGEngine()
+        self.memory = memory or EpisodicMemory()
+        self.llm_provider = llm_provider or OfflineReasoningProvider()
 
     def respond(self, query: str) -> ConversationResponse:
         """
-        Processes a user question, parses intent, consults context & knowledge,
+        Processes a user question, parses intent, consults context, memory & RAG,
         and returns a grounded natural language response.
         """
         if not query or not query.strip():
@@ -91,6 +104,12 @@ class ConversationEngine:
             resp = self._handle_ocr_read(parsed)
         elif parsed.intent == IntentType.RELIABILITY_CHECK:
             resp = self._handle_reliability_check(parsed)
+        elif parsed.intent == IntentType.MEMORY_SPATIAL:
+            resp = self._handle_memory_spatial(parsed)
+        elif parsed.intent == IntentType.MEMORY_TEMPORAL:
+            resp = self._handle_memory_temporal(parsed)
+        elif parsed.intent == IntentType.DOCUMENT_RAG:
+            resp = self._handle_document_rag(parsed)
         elif parsed.intent == IntentType.VOICE_CONTROL:
             resp = self._handle_voice_control(parsed)
         else:
@@ -98,97 +117,132 @@ class ConversationEngine:
 
         # 4. Record assistant response in conversation memory
         self.context_manager.add_conversation_turn("assistant", resp.response_text)
-
         return resp
 
     def _handle_scene_summary(self, parsed: ParsedQuery) -> ConversationResponse:
         scene = self.context_manager.latest_scene
-        if not scene:
-            text = "No visual scene has been observed yet."
+        if not scene or not scene.entities:
+            text = "The scene currently appears empty. No supported objects or text are currently detected."
         else:
-            text = scene.summary()
+            text = f"In the current frame, I observe: {scene.summary()}."
 
         return ConversationResponse(
             query=parsed.raw_query,
             intent=parsed.intent,
             response_text=text,
-            sources=["vision_engine", "tracker", "ocr"],
+            sources=["context_manager"],
         )
 
     def _handle_object_info(self, parsed: ParsedQuery) -> ConversationResponse:
-        # Resolve target object
-        target_entity = self.context_manager.resolve_reference(parsed.raw_query)
-        entity_name = target_entity.class_name if target_entity else (parsed.target_object or "object")
+        target_entity = None
+        if parsed.target_object:
+            target_entity = self.context_manager.get_entity_by_class(parsed.target_object)
+        if not target_entity and parsed.track_id:
+            target_entity = self.context_manager.get_entity_by_track_id(parsed.track_id)
+        if not target_entity:
+            target_entity = self.context_manager.resolve_reference(parsed.raw_query)
 
-        # Retrieve knowledge
-        knowledge = self.knowledge_retriever.retrieve(entity_name)
-
-        if target_entity and knowledge:
-            text = (
-                f"I see a {target_entity.describe()}. "
-                f"{knowledge.summary} (Category: {knowledge.category})."
-            )
-            sources = ["context_manager", knowledge.source]
-        elif target_entity:
-            text = f"I see a {target_entity.describe()} with {int(target_entity.confidence * 100)}% detection confidence."
-            sources = ["context_manager"]
-        elif knowledge:
-            text = f"{knowledge.title}: {knowledge.summary}"
-            sources = [knowledge.source]
-        else:
-            text = f"I cannot currently see or find information about '{parsed.raw_query}' in the current view."
-            sources = []
-
-        return ConversationResponse(
-            query=parsed.raw_query,
-            intent=parsed.intent,
-            response_text=text,
-            target_entity=target_entity,
-            knowledge_item=knowledge,
-            sources=sources,
-        )
-
-    def _handle_object_location(self, parsed: ParsedQuery) -> ConversationResponse:
-        target_entity = self.context_manager.resolve_reference(parsed.raw_query)
-
+        # If entity is in current scene
         if target_entity:
-            track_str = f" (Track #{target_entity.track_id})" if target_entity.track_id is not None else ""
-            text = f"The {target_entity.class_name}{track_str} is located in the {target_entity.spatial_pos} region of your view."
-        else:
-            scene = self.context_manager.latest_scene
-            visible_names = [e.class_name for e in scene.entities] if scene else []
-            if visible_names:
-                text = f"I cannot find that specific object. Currently visible objects are: {', '.join(set(visible_names))}."
+            k_item = self.knowledge_retriever.retrieve(target_entity.class_name)
+            if k_item:
+                text = (
+                    f"I see a {target_entity.describe()}. "
+                    f"According to {k_item.source}: {k_item.summary}"
+                )
+                return ConversationResponse(
+                    query=parsed.raw_query,
+                    intent=parsed.intent,
+                    response_text=text,
+                    target_entity=target_entity,
+                    knowledge_item=k_item,
+                    sources=[k_item.source, "context_manager"],
+                )
             else:
-                text = "There are no objects currently detected in the scene."
+                text = f"I observe a {target_entity.describe()} in the camera view."
+                return ConversationResponse(
+                    query=parsed.raw_query,
+                    intent=parsed.intent,
+                    response_text=text,
+                    target_entity=target_entity,
+                    sources=["context_manager"],
+                )
 
-        return ConversationResponse(
-            query=parsed.raw_query,
-            intent=parsed.intent,
-            response_text=text,
-            target_entity=target_entity,
-            sources=["context_manager", "spatial_reasoner"],
-        )
-
-    def _handle_object_count(self, parsed: ParsedQuery) -> ConversationResponse:
-        scene = self.context_manager.latest_scene
-        if not scene or not scene.entities:
+        # If not in scene, check knowledge base for general query
+        lookup_name = parsed.target_object or parsed.raw_query
+        k_item = self.knowledge_retriever.retrieve(lookup_name)
+        if k_item:
+            text = f"{k_item.title} ({k_item.category}): {k_item.summary}"
             return ConversationResponse(
                 query=parsed.raw_query,
                 intent=parsed.intent,
-                response_text="There are 0 objects detected in the current view.",
+                response_text=text,
+                knowledge_item=k_item,
+                sources=[k_item.source],
+            )
+
+        return ConversationResponse(
+            query=parsed.raw_query,
+            intent=parsed.intent,
+            response_text=f"I do not see a {parsed.target_object or 'requested object'} in view, and have no matching encyclopedic entry.",
+            sources=["knowledge_retriever"],
+        )
+
+    def _handle_object_location(self, parsed: ParsedQuery) -> ConversationResponse:
+        target_name = parsed.target_object or "object"
+        entity = self.context_manager.get_entity_by_class(target_name)
+        if not entity:
+            entity = self.context_manager.resolve_reference(parsed.raw_query)
+
+        if entity:
+            text = f"The {entity.class_name} is currently located in the {entity.spatial_region} region of the frame."
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text=text,
+                target_entity=entity,
                 sources=["context_manager"],
             )
 
-        if parsed.target_object:
-            matching = [e for e in scene.entities if parsed.target_object.lower() in e.class_name.lower()]
-            count = len(matching)
-            plural = "s" if count != 1 and not parsed.target_object.endswith("s") else ""
-            text = f"I count {count} {parsed.target_object}{plural} in the current view."
+        # Fallback to episodic memory if not in active view
+        event = self.memory.find_last_seen(target_name)
+        if event:
+            text = (
+                f"The {target_name} is not in the live view right now. "
+                f"However, it was last observed in the {event.spatial_region} region {event.time_ago_str()}."
+            )
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text=text,
+                memory_event=event,
+                sources=["episodic_memory"],
+            )
+
+        return ConversationResponse(
+            query=parsed.raw_query,
+            intent=parsed.intent,
+            response_text=f"I cannot locate a {target_name} in the live scene or recent memory.",
+            sources=["context_manager", "episodic_memory"],
+        )
+
+    def _handle_object_count(self, parsed: ParsedQuery) -> ConversationResponse:
+        target_name = parsed.target_object
+        scene = self.context_manager.latest_scene
+
+        if not scene:
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text="No active visual stream to count objects.",
+            )
+
+        if target_name:
+            count = scene.class_counts.get(target_name.lower(), 0)
+            text = f"I count {count} {target_name}{'s' if count != 1 else ''} in the current frame."
         else:
             total = len(scene.entities)
-            counts_str = ", ".join(f"{c} {n}" for n, c in scene.object_counts.items())
-            text = f"I count {total} total objects in view ({counts_str})."
+            text = f"There are {total} total object{'s' if total != 1 else ''} in the current frame."
 
         return ConversationResponse(
             query=parsed.raw_query,
@@ -259,14 +313,76 @@ class ConversationEngine:
             sources=["reliability_ann"],
         )
 
+    def _handle_memory_spatial(self, parsed: ParsedQuery) -> ConversationResponse:
+        """Handles 'Where was my <object>?' spatial memory recall."""
+        target_name = parsed.target_object or "object"
+        # Check active scene first
+        active_entity = self.context_manager.get_entity_by_class(target_name)
+        if active_entity:
+            text = f"Your {active_entity.class_name} is right in front of you in the {active_entity.spatial_region} region."
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text=text,
+                target_entity=active_entity,
+                sources=["context_manager"],
+            )
+
+        # Query persistent episodic memory
+        text = self.memory.query_spatial_memory(target_name)
+        event = self.memory.find_last_seen(target_name)
+        return ConversationResponse(
+            query=parsed.raw_query,
+            intent=parsed.intent,
+            response_text=text,
+            memory_event=event,
+            sources=["episodic_memory"],
+        )
+
+    def _handle_memory_temporal(self, parsed: ParsedQuery) -> ConversationResponse:
+        """Handles 'When was <object> last seen?' temporal recall."""
+        target_name = parsed.target_object or "person"
+        text = self.memory.query_temporal_memory(target_name)
+        event = self.memory.find_last_seen(target_name)
+        return ConversationResponse(
+            query=parsed.raw_query,
+            intent=parsed.intent,
+            response_text=text,
+            memory_event=event,
+            sources=["episodic_memory"],
+        )
+
+    def _handle_document_rag(self, parsed: ParsedQuery) -> ConversationResponse:
+        """Handles document manuals, operating procedures, and safety guidelines queries."""
+        rag_res = self.rag_engine.query(parsed.raw_query)
+
+        if rag_res.has_results:
+            top_doc = rag_res.top_document
+            text = f"According to '{top_doc.title}': {top_doc.content}"
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text=text,
+                rag_result=rag_res,
+                sources=["rag_vector_store"],
+            )
+
+        return ConversationResponse(
+            query=parsed.raw_query,
+            intent=parsed.intent,
+            response_text="I searched the indexed documentation, but found no matching manual guidelines for this query.",
+            sources=["rag_vector_store"],
+        )
+
     def _handle_voice_control(self, parsed: ParsedQuery) -> ConversationResponse:
         q = parsed.raw_query.lower()
         if "clear memory" in q:
             self.context_manager.clear()
+            self.memory.clear()
             return ConversationResponse(
                 query=parsed.raw_query,
                 intent=parsed.intent,
-                response_text="Context and conversation memory have been cleared.",
+                response_text="Context and episodic memory have been completely cleared.",
             )
 
         return ConversationResponse(
@@ -276,7 +392,19 @@ class ConversationEngine:
         )
 
     def _handle_general_qa(self, parsed: ParsedQuery) -> ConversationResponse:
-        # Check if there is an entity mentioned
+        # 1. Check if query matches a document in RAG
+        rag_res = self.rag_engine.query(parsed.raw_query)
+        if rag_res.has_results and rag_res.scores[0] >= 0.35:
+            top_doc = rag_res.top_document
+            return ConversationResponse(
+                query=parsed.raw_query,
+                intent=parsed.intent,
+                response_text=f"From '{top_doc.title}': {top_doc.content}",
+                rag_result=rag_res,
+                sources=["rag_vector_store"],
+            )
+
+        # 2. Check if there is an entity mentioned
         target_entity = self.context_manager.resolve_reference(parsed.raw_query)
         knowledge = None
         if target_entity:
@@ -292,7 +420,7 @@ class ConversationEngine:
             text = f"I am observing a {target_entity.describe()} in the scene."
             sources = ["context_manager"]
         else:
-            text = f"Based on the visual scene ({scene_info}), I can provide assistance regarding visible objects or text."
+            text = f"Based on the visual scene ({scene_info}), I can provide assistance regarding visible objects, manuals, or memory."
             sources = ["context_manager"]
 
         return ConversationResponse(
