@@ -43,14 +43,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="yolo11n.pt",
-        help="YOLO model path or identifier (e.g., 'yolo11n.pt', 'yolov8n.pt'). Default: 'yolo11n.pt'",
+        default="yolo11m.pt",
+        help="YOLO model path or identifier (e.g., 'yolo11m.pt', 'yolo11s.pt', 'yolo11n.pt'). Default: 'yolo11m.pt'",
     )
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.25,
-        help="Detection confidence threshold in range [0.0, 1.0]. Default: 0.25",
+        default=0.40,
+        help="Detection confidence threshold in range [0.0, 1.0]. Default: 0.40",
     )
     parser.add_argument(
         "--device",
