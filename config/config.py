@@ -119,12 +119,25 @@ class VoiceConfig:
 
 
 @dataclass
+class SAHIConfig:
+    """Configuration for Slicing Aided Hyper Inference (SAHI)."""
+    enabled: bool = False
+    slice_width: int = 320
+    slice_height: int = 320
+    overlap_width_ratio: float = 0.2
+    overlap_height_ratio: float = 0.2
+    nms_threshold: float = 0.5
+    include_full_frame: bool = True
+
+
+@dataclass
 class AuraConfig:
     """Master configuration for AURA application."""
     camera: CameraConfig = field(default_factory=CameraConfig)
     vision: VisionConfig = field(default_factory=VisionConfig)
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     ocr: OCRConfig = field(default_factory=OCRConfig)
+    sahi: SAHIConfig = field(default_factory=SAHIConfig)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
     ann: AnnConfig = field(default_factory=AnnConfig)
