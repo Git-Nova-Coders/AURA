@@ -21,7 +21,7 @@ class CameraConfig:
 @dataclass
 class VisionConfig:
     """Configuration for object detection vision engine."""
-    model_name: str = "yolov8s-worldv2.pt"  # YOLO-World v2: Open-Vocabulary real-time detector
+    model_name: str = "yolov8m-worldv2.pt"  # YOLO-World v2 Medium: High-precision Open-Vocabulary detector
     confidence_threshold: float = 0.35
     iou_threshold: float = 0.45
     device: str = "auto"  # 'auto', 'cpu', 'cuda', etc.
