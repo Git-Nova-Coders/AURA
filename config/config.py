@@ -4,7 +4,7 @@ Defines default settings and dataclass-based configurations for AURA subsystems.
 """
 
 from dataclasses import dataclass, field
-from typing import Union, List
+from typing import Union, List, Optional
 
 
 @dataclass
@@ -21,12 +21,13 @@ class CameraConfig:
 @dataclass
 class VisionConfig:
     """Configuration for object detection vision engine."""
-    model_name: str = "yolo11m.pt"  # Upgraded to YOLOv11 Medium for high-accuracy discrimination
-    confidence_threshold: float = 0.40  # Raised from 0.25 to 0.40 to eliminate noisy false positives
+    model_name: str = "yolov8m-worldv2.pt"  # YOLO-World v2 Medium: High-precision Open-Vocabulary detector
+    confidence_threshold: float = 0.35
     iou_threshold: float = 0.45
     device: str = "auto"  # 'auto', 'cpu', 'cuda', etc.
     half: bool = False  # FP16 inference if CUDA is available
-    enable_geometric_filter: bool = True  # Suppress false positives (hands as person, notebooks as laptop)
+    enable_geometric_filter: bool = True  # Suppress false positives (hands as person)
+    custom_classes: Optional[List[str]] = None  # Dynamic custom vocabulary (defaults to AURA vocabulary)
 
 
 @dataclass

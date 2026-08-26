@@ -1,7 +1,8 @@
 """
 AURA Vision Detector Module
-Provides pretrained YOLO-based object detection, structured detection outputs,
-geometric anomaly suppression (filtering hands as person, books as laptop), and frame annotation.
+Supports standard YOLO models and YOLO-World Open-Vocabulary models with custom vocabularies,
+structured detection outputs, per-class confidence thresholds, geometric anomaly suppression,
+and frame annotation.
 """
 
 import os
@@ -15,6 +16,44 @@ from ultralytics import YOLO
 from .camera import Frame
 
 logger = logging.getLogger(__name__)
+
+# Default comprehensive indoor/assistant vocabulary for YOLO-World Open-Vocabulary detection
+DEFAULT_AURA_VOCABULARY: List[str] = [
+    "person",
+    "laptop",
+    "notebook",
+    "book",
+    "smartphone",
+    "pen",
+    "pencil",
+    "water bottle",
+    "cup",
+    "backpack",
+    "handbag",
+    "headphones",
+    "glasses",
+    "keyboard",
+    "computer mouse",
+    "chair",
+    "desk",
+    "wrist watch",
+]
+
+# Class-specific confidence thresholds to suppress common hallucinations
+DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
+    "laptop": 0.45,      # High accuracy now that 'notebook' is a distinct class
+    "notebook": 0.35,    # Dedicated notebook detection
+    "pen": 0.30,         # Fine-object detection
+    "person": 0.40,      # Prevents floating hands/arms
+    "smartphone": 0.40,  # Clear phone detection
+    "headphones": 0.35,  # Audio gear
+    "water bottle": 0.35,
+    "cup": 0.35,
+    "book": 0.38,
+    "backpack": 0.40,
+    "handbag": 0.40,
+    "glasses": 0.30,
+}
 
 
 @dataclass
@@ -112,7 +151,6 @@ class ModelLoadError(DetectorError):
     pass
 
 
-# Deterministic distinct colors for classes based on class_id
 def get_class_color(class_id: int) -> Tuple[int, int, int]:
     """Generates a consistent, visually distinct BGR color for each class ID."""
     np.random.seed(class_id * 37 + 101)
@@ -197,18 +235,20 @@ def draw_detections(
 
 class ObjectDetector:
     """
-    Vision Engine object detector wrapping pretrained Ultralytics YOLO models.
-    Includes built-in geometric anomaly filtering to eliminate false positives.
+    Vision Engine object detector wrapping Ultralytics YOLO & YOLO-World Open-Vocabulary models.
+    Supports dynamic custom vocabulary, per-class thresholds, and geometric anomaly suppression.
     """
 
     def __init__(
         self,
-        model_name: str = "yolo11m.pt",
-        confidence_threshold: float = 0.40,
+        model_name: str = "yolov8m-worldv2.pt",
+        confidence_threshold: float = 0.35,
         iou_threshold: float = 0.45,
         device: str = "auto",
         half: bool = False,
         enable_geometric_filter: bool = True,
+        class_thresholds: Optional[Dict[str, float]] = None,
+        custom_classes: Optional[List[str]] = None,
     ):
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
@@ -216,11 +256,15 @@ class ObjectDetector:
         self.device = device
         self.half = half
         self.enable_geometric_filter = enable_geometric_filter
+        self.class_thresholds = class_thresholds or DEFAULT_CLASS_THRESHOLDS
+        self.custom_classes = custom_classes or (
+            DEFAULT_AURA_VOCABULARY if "world" in model_name.lower() else None
+        )
         self._model: Optional[YOLO] = None
         self._load_model()
 
     def _load_model(self) -> None:
-        """Loads the YOLO model instance once during initialization."""
+        """Loads the YOLO model instance and configures custom vocabulary if supported."""
         resolved_path = self.model_name
         if not os.path.isabs(resolved_path) and not os.path.exists(resolved_path):
             models_dir_path = os.path.join("models", resolved_path)
@@ -230,6 +274,10 @@ class ObjectDetector:
         logger.info(f"Loading YOLO model '{resolved_path}' on device '{self.device}'...")
         try:
             self._model = YOLO(resolved_path)
+            # If YOLO-World model, apply custom vocabulary
+            if self.custom_classes and hasattr(self._model, "set_classes"):
+                self._model.set_classes(self.custom_classes)
+                logger.info(f"YOLO-World configured with {len(self.custom_classes)} custom classes: {self.custom_classes}")
             logger.info(f"YOLO model '{resolved_path}' loaded successfully.")
         except Exception as e:
             logger.error(f"Failed to load YOLO model '{resolved_path}': {e}", exc_info=True)
@@ -237,9 +285,18 @@ class ObjectDetector:
                 f"Could not load YOLO model '{resolved_path}'. Error: {e}"
             ) from e
 
+    def set_custom_classes(self, classes: List[str]) -> None:
+        """Dynamically updates the Open-Vocabulary class list at runtime."""
+        self.custom_classes = list(classes)
+        if self._model is not None and hasattr(self._model, "set_classes"):
+            self._model.set_classes(self.custom_classes)
+            logger.info(f"Updated YOLO-World vocabulary ({len(self.custom_classes)} classes): {self.custom_classes}")
+
     @property
     def class_names(self) -> Dict[int, str]:
         """Returns the dictionary mapping class IDs to class names."""
+        if self.custom_classes:
+            return {i: name for i, name in enumerate(self.custom_classes)}
         if self._model is not None and hasattr(self._model, "names"):
             return self._model.names
         return {}
@@ -251,10 +308,9 @@ class ObjectDetector:
         img_h: int,
     ) -> List[Detection]:
         """
-        Suppresses common false positive classifications using spatial and anatomical heuristics:
-        1. Hands / Arms misclassified as 'person' (tiny area or extreme horizontal aspect ratio).
-        2. Flat binders / notebooks misclassified as 'laptop'.
-        3. Tiny noisy bounding boxes (< 150 px).
+        Suppresses common false positive classifications using spatial heuristics:
+        1. Hands / Arms misclassified as 'person' (small area or horizontal ratio).
+        2. Micro noise boxes (< 100 px).
         """
         frame_area = float(img_w * img_h)
         clean_detections: List[Detection] = []
@@ -266,26 +322,15 @@ class ObjectDetector:
             norm_area = area / max(frame_area, 1.0)
             aspect_ratio = (w / h) if h > 1e-5 else 1.0
 
-            # Filter 1: Discard micro-noise (< 150 pixels)
-            if area < 150.0:
+            # Filter 1: Discard micro-noise (< 100 pixels)
+            if area < 100.0:
                 continue
 
-            # Filter 2: Person Anomaly Suppression (Rules out hands / skin patches)
+            # Filter 2: Person Anomaly Suppression (Rules out hands, wrists, skin patches)
             if d.class_name.lower() == "person":
-                # A person cannot be tiny (< 1.5% of camera frame) unless confidence > 0.88
-                if norm_area < 0.015 and d.confidence < 0.88:
+                if norm_area < 0.02 and d.confidence < 0.88:
                     continue
-                # A person is vertically oriented; horizontal boxes (w > 2.2 * h) are hands/arms
-                if aspect_ratio > 2.2 and d.confidence < 0.85:
-                    continue
-
-            # Filter 3: Laptop Anomaly Suppression (Rules out small notebooks/books/paper sheets)
-            elif d.class_name.lower() == "laptop":
-                # Laptop screen + base requires reasonable area (> 2.5% of frame)
-                if norm_area < 0.025 and d.confidence < 0.75:
-                    continue
-                # Laptops are typically horizontal or square, not extreme vertical slivers
-                if (aspect_ratio < 0.45 or aspect_ratio > 3.0) and d.confidence < 0.80:
+                if aspect_ratio > 1.4 and d.confidence < 0.85:
                     continue
 
             clean_detections.append(d)
@@ -309,11 +354,11 @@ class ObjectDetector:
             logger.warning("Received empty or invalid image frame for detection.")
             return []
 
-        conf = conf_threshold if conf_threshold is not None else self.confidence_threshold
+        base_conf = conf_threshold if conf_threshold is not None else self.confidence_threshold
 
         predict_kwargs: Dict[str, Any] = {
             "source": img,
-            "conf": conf,
+            "conf": max(0.12, base_conf - 0.15),  # Predict with lower floor then apply per-class thresholds
             "iou": self.iou_threshold,
             "verbose": False,
         }
@@ -339,11 +384,18 @@ class ObjectDetector:
         confs = boxes.conf.cpu().numpy()
         cls_ids = boxes.cls.cpu().numpy().astype(int)
 
+        current_class_names = self.class_names
+
         for i in range(len(cls_ids)):
             c_id = int(cls_ids[i])
-            c_name = self.class_names.get(c_id, str(c_id))
+            c_name = current_class_names.get(c_id, str(c_id))
             c_conf = float(confs[i])
             c_bbox = [float(xyxy[i][0]), float(xyxy[i][1]), float(xyxy[i][2]), float(xyxy[i][3])]
+
+            # Check per-class threshold
+            class_req_conf = self.class_thresholds.get(c_name.lower(), base_conf)
+            if c_conf < class_req_conf:
+                continue
 
             detections.append(
                 Detection(
