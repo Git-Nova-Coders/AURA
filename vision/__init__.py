@@ -19,6 +19,18 @@ from .tracker import ObjectTracker, TrackedObject, compute_iou
 from .pipeline import VisionPipeline, PipelineResult
 from .dataset_collector import DatasetCollector, LabeledFeatureSample
 from .sahi import SlicedInferenceEngine, SliceWindow, generate_slice_grid, apply_nms_merging
+from .gestures import (
+    GestureType,
+    GestureMode,
+    GestureResult,
+    HandLandmark3D,
+    MediaPipeHandTracker,
+    HandGestureRecognizer,
+    GestureActionController,
+    find_pointed_object,
+    draw_hand_skeleton,
+    draw_action_toast,
+)
 
 __all__ = [
     "Frame",
@@ -44,4 +56,14 @@ __all__ = [
     "SliceWindow",
     "generate_slice_grid",
     "apply_nms_merging",
+    "GestureType",
+    "GestureMode",
+    "GestureResult",
+    "HandLandmark3D",
+    "MediaPipeHandTracker",
+    "HandGestureRecognizer",
+    "GestureActionController",
+    "find_pointed_object",
+    "draw_hand_skeleton",
+    "draw_action_toast",
 ]

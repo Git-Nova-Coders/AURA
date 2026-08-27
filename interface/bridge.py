@@ -29,6 +29,14 @@ from brain.context import ContextManager, SceneContext, ObjectEntity
 from brain.conversation import ConversationEngine, ConversationResponse
 from brain.memory import EpisodicMemory
 from brain.llm import create_llm_provider
+from vision.gestures import (
+    GestureActionController,
+    GestureMode,
+    GestureResult,
+    GestureType,
+    draw_hand_skeleton,
+    draw_action_toast,
+)
 
 logger = logging.getLogger("AURA.Bridge")
 
@@ -48,6 +56,9 @@ class TelemetrySnapshot:
     voice_status: str = "OFF"
     memory_enabled: bool = False
     rag_enabled: bool = False
+    gesture_mode: str = "ALL_OBJECTS"
+    active_gesture: str = "none"
+    pointed_target: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -64,6 +75,9 @@ class TelemetrySnapshot:
             "voice_status": self.voice_status,
             "memory_enabled": self.memory_enabled,
             "rag_enabled": self.rag_enabled,
+            "gesture_mode": self.gesture_mode,
+            "active_gesture": self.active_gesture,
+            "pointed_target": self.pointed_target,
             "timestamp": round(self.timestamp, 2),
         }
 
@@ -91,7 +105,7 @@ class AuraBridge:
         no_ann: bool = False,
         ann_model: str = "models/reliability_ann.pth",
         ann_scaler: str = "models/scaler.pkl",
-        ann_thresh: float = 0.5,
+        ann_thresh: float = 0.25,
         enable_rag: bool = True,
         rag_dir: str = "data/manuals",
         enable_memory: bool = True,
@@ -209,6 +223,9 @@ class AuraBridge:
 
         # OCR cache
         self._last_ocr_texts: List[TextDetection] = []
+
+        # Gesture Controller
+        self.gesture_controller = GestureActionController()
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
 
@@ -349,9 +366,30 @@ class AuraBridge:
                         last_infer_latency = (t1_inf - t0_inf) * 1000.0
                 time.sleep(0.005)
 
+        ocr_lock = threading.Lock()
+        def async_ocr_worker():
+            while self._running:
+                if self.ocr_engine is not None:
+                    work_frame = None
+                    with frame_lock:
+                        if latest_camera_frame is not None:
+                            work_frame = latest_camera_frame
+                    if work_frame is not None:
+                        try:
+                            texts = self.ocr_engine.extract_text(work_frame)
+                            with ocr_lock:
+                                self._last_ocr_texts = texts
+                        except Exception as e:
+                            logger.debug(f"Async OCR extract error: {e}")
+                # Scan OCR in background at 1.5s interval without blocking video stream
+                time.sleep(1.5)
+
         if not self._use_synthetic:
             infer_thread = threading.Thread(target=async_inference_worker, daemon=True, name="AURA_Async_Infer")
             infer_thread.start()
+            if self.ocr_engine is not None:
+                ocr_thread = threading.Thread(target=async_ocr_worker, daemon=True, name="AURA_Async_OCR")
+                ocr_thread.start()
 
         while self._running:
             t0 = time.perf_counter()
@@ -399,22 +437,18 @@ class AuraBridge:
                     detections[i].reliability_score = rel_res.score
                     detections[i].reliability_label = rel_res.label
 
-            # 5. Periodic OCR (for camera mode)
-            if (
-                not self._use_synthetic
-                and self.ocr_engine is not None
-                and (frame_count % max(1, self.ocr_stride) == 0)
-            ):
-                self._last_ocr_texts = self.ocr_engine.extract_text(frame)
+            # 5. Non-blocking OCR state sync
+            with ocr_lock:
+                current_ocr_texts = list(self._last_ocr_texts)
 
             # 6. Context update
             object_texts_map: Dict[int, List[TextDetection]] = {}
-            if self._last_ocr_texts and detections:
+            if current_ocr_texts and detections:
                 for idx, det in enumerate(detections):
                     key = det.track_id if det.track_id is not None else idx
                     dx1, dy1, dx2, dy2 = det.bbox
                     matching = []
-                    for t in self._last_ocr_texts:
+                    for t in current_ocr_texts:
                         tcx, tcy = t.center
                         if dx1 <= tcx <= dx2 and dy1 <= tcy <= dy2:
                             matching.append(t)
@@ -423,7 +457,7 @@ class AuraBridge:
 
             scene_context = self.context_manager.update(
                 detections=detections,
-                text_detections=self._last_ocr_texts,
+                text_detections=current_ocr_texts,
                 object_texts=object_texts_map,
                 frame_shape=frame.shape,
             )
@@ -432,17 +466,76 @@ class AuraBridge:
             if self._enable_memory and self.episodic_memory:
                 self.episodic_memory.record_scene(scene_context)
 
-            # 8. Annotate frame
-            annotated = self.detector.annotate(frame, detections)
-            if self._last_ocr_texts:
-                annotated = draw_text_annotations(annotated, self._last_ocr_texts)
+            # 8. Hand Gesture Interactive Control
+            raw_img = frame.image if isinstance(frame, Frame) else frame
+            (
+                visible_detections,
+                gesture_mode,
+                active_gesture,
+                pointed_target,
+            ) = self.gesture_controller.update(raw_img, detections)
 
-            # 9. Encode to JPEG
+            # 9. Annotate frame based on active gesture mode
+            if gesture_mode == GestureMode.HIDE_BOXES:
+                # Clean View: No bounding boxes rendered
+                annotated = raw_img.copy()
+                cv2.putText(
+                    annotated,
+                    "GESTURE MODE: 🖐️ HIDE ALL BOXES (OPEN PALM)",
+                    (16, 32),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55,
+                    (0, 240, 255),
+                    2,
+                )
+            else:
+                annotated = self.detector.annotate(raw_img, visible_detections)
+                if self._last_ocr_texts:
+                    annotated = draw_text_annotations(annotated, self._last_ocr_texts)
+
+                # Pointing Laser & Target Visual Indicator
+                if (
+                    gesture_mode in (GestureMode.FOCUS_OBJECT, GestureMode.INSPECT_OBJECT)
+                    and pointed_target is not None
+                    and active_gesture.pointing_tip is not None
+                ):
+                    ptx, pty = int(active_gesture.pointing_tip[0]), int(active_gesture.pointing_tip[1])
+                    tx1, ty1, tx2, ty2 = [int(c) for c in pointed_target.bbox]
+                    tcx, tcy = (tx1 + tx2) // 2, (ty1 + ty2) // 2
+                    
+                    # Draw laser ray with glow
+                    cv2.line(annotated, (ptx, pty), (tcx, tcy), (0, 240, 255), 2, cv2.LINE_AA)
+                    cv2.circle(annotated, (ptx, pty), 7, (0, 240, 255), -1, cv2.LINE_AA)
+                    
+                    # Target Crosshair Reticle
+                    cv2.circle(annotated, (tcx, tcy), 14, (0, 255, 120), 2, cv2.LINE_AA)
+                    cv2.drawMarker(annotated, (tcx, tcy), (0, 255, 120), cv2.MARKER_CROSS, 20, 2)
+                    
+                    tag_prefix = "👌 INSPECTING" if gesture_mode == GestureMode.INSPECT_OBJECT else "👉 LOCKED"
+                    cv2.putText(
+                        annotated,
+                        f"{tag_prefix}: {pointed_target.class_name.upper()}",
+                        (tx1, max(20, ty1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.60,
+                        (0, 240, 255),
+                        2,
+                    )
+
+            # Draw Cybernetic 21-Landmark Hand Skeleton
+            if active_gesture.landmarks:
+                annotated = draw_hand_skeleton(annotated, active_gesture)
+
+            # Draw Real-Time HUD Action Toast Banner
+            if self.gesture_controller.active_toast and time.time() < self.gesture_controller.toast_expiry_time:
+                annotated = draw_action_toast(annotated, self.gesture_controller.active_toast)
+
+            # 10. Encode to JPEG
             _, jpeg_buf = cv2.imencode(
                 ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75],
             )
 
-            # 10. FPS
+            # 11. FPS & Telemetry
             loop_time = time.perf_counter() - t0
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = (
@@ -458,23 +551,26 @@ class AuraBridge:
                 self.detector.sahi_config and self.detector.sahi_config.enabled
             )
 
-            # 11. Update buffered state (thread-safe)
+            # 12. Update buffered state (thread-safe)
             with self._lock:
                 self._latest_annotated_jpeg = jpeg_buf.tobytes()
                 self._latest_scene = scene_context
-                self._latest_detections = list(detections)
+                self._latest_detections = list(visible_detections)
                 self._telemetry = TelemetrySnapshot(
                     fps=fps_ema,
                     inference_latency_ms=infer_latency_ms,
                     frame_count=frame_count,
                     active_tracks=active_tracks,
-                    detection_count=len(detections),
+                    detection_count=len(visible_detections),
                     ocr_text_count=ocr_count,
                     sahi_enabled=sahi_active,
                     tracking_enabled=self._tracking_enabled,
                     ann_version=self.reliability_ann.model_version,
                     memory_enabled=self._enable_memory,
                     rag_enabled=self._enable_rag,
+                    gesture_mode=gesture_mode.value,
+                    active_gesture=active_gesture.gesture.value,
+                    pointed_target=pointed_target.class_name if pointed_target else None,
                 )
 
             frame_count += 1

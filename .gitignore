@@ -22,6 +22,7 @@ env/
 *.pth
 *.onnx
 *.pkl
+*.task
 models/*.json
 
 # Data
@@ -30,6 +31,7 @@ data/processed/
 
 # Logs & Captures
 logs/
+captures/
 aura_capture_*.jpg
 *.avi
 *.db

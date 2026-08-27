@@ -141,6 +141,27 @@ def compute_iou(box1: List[float], box2: List[float]) -> float:
     return float(intersection_area / union_area)
 
 
+def compute_ios(box1: List[float], box2: List[float]) -> float:
+    """Computes Intersection-over-Smaller (IoS) containment metric."""
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+
+    intersection_w = max(0.0, x2 - x1)
+    intersection_h = max(0.0, y2 - y1)
+    intersection_area = intersection_w * intersection_h
+
+    area1 = max(0.0, box1[2] - box1[0]) * max(0.0, box1[3] - box1[1])
+    area2 = max(0.0, box2[2] - box2[0]) * max(0.0, box2[3] - box2[1])
+    min_area = min(area1, area2)
+
+    if min_area <= 1e-6:
+        return 0.0
+
+    return float(intersection_area / min_area)
+
+
 def apply_nms_merging(
     detections: List[Detection],
     iou_threshold: float = 0.5,
@@ -178,7 +199,8 @@ def apply_nms_merging(
                 continue
 
             iou = compute_iou(best_det.bbox, other_det.bbox)
-            if iou >= iou_threshold:
+            ios = compute_ios(best_det.bbox, other_det.bbox)
+            if iou >= iou_threshold or ios >= 0.60:
                 overlapping.append(other_det)
             else:
                 remaining.append(other_det)

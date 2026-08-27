@@ -37,7 +37,7 @@ class ReliabilityInference:
         enabled: bool = True,
         model_path: str = "models/reliability_ann.pth",
         scaler_path: str = "models/scaler.pkl",
-        confidence_threshold: float = 0.5,
+        confidence_threshold: float = 0.30,
         device: str = "cpu",
     ):
         self.enabled = enabled
