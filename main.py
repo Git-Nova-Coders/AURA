@@ -149,8 +149,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ann-thresh",
         type=float,
-        default=0.5,
-        help="Decision threshold for reliable/unreliable label. Default: 0.5",
+        default=0.25,
+        help="Decision threshold for reliable/unreliable label. Default: 0.25",
     )
     parser.add_argument(
         "--voice",
@@ -515,10 +515,31 @@ def run_pipeline(
                     last_infer_latency = (t1_inf - t0_inf) * 1000.0
             time.sleep(0.005)
 
+    ocr_lock = threading.Lock()
+    def ocr_worker():
+        nonlocal last_ocr_texts
+        while running:
+            if ocr_engine is not None:
+                work_frame = None
+                with frame_lock:
+                    if latest_camera_frame is not None:
+                        work_frame = latest_camera_frame
+                if work_frame is not None:
+                    try:
+                        texts = ocr_engine.extract_text(work_frame)
+                        with ocr_lock:
+                            last_ocr_texts = texts
+                    except Exception as e:
+                        logger.debug(f"Async OCR error: {e}")
+            time.sleep(1.5)
+
     if use_async:
         logger.info("Starting Decoupled Real-Time Async Vision Worker...")
         infer_thread = threading.Thread(target=inference_worker, daemon=True)
         infer_thread.start()
+        if ocr_engine is not None:
+            ocr_thread = threading.Thread(target=ocr_worker, daemon=True)
+            ocr_thread.start()
 
     logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
     logger.info("Controls: 'v'=Voice, 'c'=Console Query, 'r'=RAG Lookup, 'k'=Knowledge, 'm'=Memory, 'i'=Scene Info, 't'=Tracker, 'h'=SAHI, 'o'=OCR")
@@ -566,18 +587,18 @@ def run_pipeline(
                     detections[i].reliability_score = rel_res.score
                     detections[i].reliability_label = rel_res.label
 
-            # 5. Periodic / Strided OCR
-            if ocr_engine is not None and (frame_count % max(1, ocr_stride) == 0):
-                last_ocr_texts = ocr_engine.extract_text(frame)
+            # 5. Non-blocking OCR state sync
+            with ocr_lock:
+                current_ocr_texts = list(last_ocr_texts)
 
             # 6. Update Multimodal Context & Object-Text associations
             object_texts_map: Dict[int, List[TextDetection]] = {}
-            if ocr_engine is not None and last_ocr_texts:
-                object_texts_map = ocr_engine.extract_text_for_detections(last_ocr_texts, detections)
+            if ocr_engine is not None and current_ocr_texts:
+                object_texts_map = ocr_engine.extract_text_for_detections(current_ocr_texts, detections)
 
             scene_context: SceneContext = context_manager.update(
                 detections=detections,
-                text_detections=last_ocr_texts,
+                text_detections=current_ocr_texts,
                 object_texts=object_texts_map,
                 frame_shape=frame.shape,
             )
