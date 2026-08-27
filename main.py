@@ -31,6 +31,14 @@ from brain.context import ContextManager, SceneContext
 from brain.conversation import ConversationEngine, ConversationResponse
 from brain.memory import EpisodicMemory
 from brain.llm import create_llm_provider
+from vision.gestures import (
+    GestureActionController,
+    GestureMode,
+    GestureResult,
+    GestureType,
+    draw_hand_skeleton,
+    draw_action_toast,
+)
 from voice.engine import VoiceAssistant
 from voice.tts import TextToSpeech
 from voice.stt import SpeechToText
@@ -223,6 +231,18 @@ def parse_args() -> argparse.Namespace:
         default=0.20,
         help="SAHI slice horizontal/vertical overlap ratio in range [0.0, 0.8]. Default: 0.20",
     )
+    parser.add_argument(
+        "--gestures",
+        action="store_true",
+        default=True,
+        help="Enable interactive hand gesture tracking (Open Palm to clear, Pointing to focus). Default: True",
+    )
+    parser.add_argument(
+        "--no-gestures",
+        action="store_false",
+        dest="gestures",
+        help="Disable hand gesture interactive controls.",
+    )
     return parser.parse_args()
 
 
@@ -263,6 +283,8 @@ def draw_hud(
     memory_enabled: bool = False,
     ann_version: Optional[str] = None,
     voice_status: str = "OFF",
+    gesture_mode: str = "ALL_OBJECTS",
+    active_gesture: str = "none",
     last_subtitle: Optional[str] = None,
 ) -> np.ndarray:
     """Renders a sleek HUD status bar and bottom subtitle display."""
@@ -279,10 +301,11 @@ def draw_hud(
     mem_str = " | Mem: ON" if memory_enabled else ""
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
+    gesture_badge = f" | 🖐️ {gesture_mode}" if gesture_mode != "ALL_OBJECTS" else ""
 
     hud_text = (
         f"AURA v0.8 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}"
+        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}{gesture_badge}"
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -353,8 +376,9 @@ def run_pipeline(
     enable_memory: bool = False,
     memory_db: str = "data/memory.db",
     llm_provider: str = "offline",
+    enable_gestures: bool = True,
 ) -> int:
-    """Main execution loop for AURA Milestone 8 (Vision + SAHI + Memory + RAG + Voice)."""
+    """Main execution loop for AURA Milestone 8 (Vision + SAHI + Memory + RAG + Voice + Gestures)."""
     source_target = int(source_val) if source_val.isdigit() else source_val
     classes_list = [c.strip() for c in custom_classes.split(",") if c.strip()] if custom_classes else None
 
@@ -448,6 +472,31 @@ def run_pipeline(
             on_speech_start=lambda txt: update_subtitle(txt),
             on_speech_end=lambda txt: None,
         )
+
+    # Gesture Action Callback Hooks
+    def on_inspect_target(target: Detection):
+        query = f"Inspect and describe this {target.class_name} in the scene."
+        if voice_assistant:
+            resp = voice_assistant.process_text_query(query, speak_output=enable_tts)
+        else:
+            resp = conversation_engine.respond(query)
+        update_subtitle(f"AURA: {resp.response_text}")
+
+    def on_toggle_sahi():
+        if detector.sahi_config:
+            detector.sahi_config.enabled = not detector.sahi_config.enabled
+            logger.info(f"SAHI toggled to {detector.sahi_config.enabled}")
+
+    def on_voice_trigger():
+        if voice_assistant:
+            threading.Thread(target=voice_assistant.listen_and_respond, daemon=True).start()
+
+    gesture_controller = GestureActionController(
+        debounce_frames=2,
+        on_inspect_callback=on_inspect_target,
+        on_toggle_sahi_callback=on_toggle_sahi,
+        on_voice_trigger_callback=on_voice_trigger,
+    ) if enable_gestures else None
 
     collector = DatasetCollector() if dataset_csv else None
 
@@ -626,13 +675,68 @@ def run_pipeline(
             current_fps = 1.0 / max(loop_time, 1e-6)
             fps_ema = current_fps if frame_count == 0 else (alpha * current_fps + (1 - alpha) * fps_ema)
 
-            # 10. Render Annotations & Enhanced HUD
-            annotated_frame = detector.annotate(frame, detections)
-            if ocr_engine is not None and last_ocr_texts:
-                annotated_frame = draw_text_annotations(annotated_frame, last_ocr_texts)
+            # 10. Hand Gesture Interactive Control
+            gesture_mode_val = "ALL_OBJECTS"
+            active_gesture_val = "none"
+            visible_detections = detections
+
+            if gesture_controller is not None:
+                (
+                    visible_detections,
+                    g_mode,
+                    act_gest,
+                    pointed_target,
+                ) = gesture_controller.update(frame.image, detections)
+                gesture_mode_val = g_mode.value
+                active_gesture_val = act_gest.gesture.value
+
+            # 11. Render Annotations & Enhanced HUD
+            if gesture_mode_val == "HIDE_BOXES":
+                annotated_frame = frame.image.copy()
+            else:
+                annotated_frame = detector.annotate(frame, visible_detections)
+                if ocr_engine is not None and current_ocr_texts:
+                    annotated_frame = draw_text_annotations(annotated_frame, current_ocr_texts)
+
+                # Pointing Laser & Lock-On Visual Target Indicator
+                if (
+                    gesture_mode_val in ("FOCUS_OBJECT", "INSPECT")
+                    and pointed_target is not None
+                    and act_gest.pointing_tip is not None
+                ):
+                    ptx, pty = int(act_gest.pointing_tip[0]), int(act_gest.pointing_tip[1])
+                    tx1, ty1, tx2, ty2 = [int(c) for c in pointed_target.bbox]
+                    tcx, tcy = (tx1 + tx2) // 2, (ty1 + ty2) // 2
+                    
+                    # Draw laser ray with glow
+                    cv2.line(annotated_frame, (ptx, pty), (tcx, tcy), (0, 240, 255), 2, cv2.LINE_AA)
+                    cv2.circle(annotated_frame, (ptx, pty), 7, (0, 240, 255), -1, cv2.LINE_AA)
+                    
+                    # Target Crosshair Reticle
+                    cv2.circle(annotated_frame, (tcx, tcy), 14, (0, 255, 120), 2, cv2.LINE_AA)
+                    cv2.drawMarker(annotated_frame, (tcx, tcy), (0, 255, 120), cv2.MARKER_CROSS, 20, 2)
+                    
+                    tag_prefix = "👌 INSPECTING" if gesture_mode_val == "INSPECT" else "👉 LOCKED"
+                    cv2.putText(
+                        annotated_frame,
+                        f"{tag_prefix}: {pointed_target.class_name.upper()}",
+                        (tx1, max(24, ty1 - 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.60,
+                        (0, 240, 255),
+                        2,
+                    )
+
+            # Draw Cybernetic 21-Landmark Hand Skeleton
+            if act_gest.landmarks:
+                annotated_frame = draw_hand_skeleton(annotated_frame, act_gest)
+
+            # Draw Real-Time HUD Action Toast Banner
+            if gesture_controller and gesture_controller.active_toast and time.time() < gesture_controller.toast_expiry_time:
+                annotated_frame = draw_action_toast(annotated_frame, gesture_controller.active_toast)
 
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
-            ocr_count = len(last_ocr_texts) if ocr_engine is not None else -1
+            ocr_count = len(current_ocr_texts) if ocr_engine is not None else -1
             v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
             sahi_is_active = bool(detector.sahi_config and detector.sahi_config.enabled)
 
@@ -642,7 +746,7 @@ def run_pipeline(
             annotated_frame = draw_hud(
                 annotated_frame,
                 fps=fps_ema,
-                num_detections=len(detections),
+                num_detections=len(visible_detections),
                 model_name=detector.model_name,
                 latency_ms=infer_latency_ms,
                 tracking_enabled=tracking_active,
@@ -653,6 +757,8 @@ def run_pipeline(
                 memory_enabled=enable_memory,
                 ann_version=reliability_ann.model_version,
                 voice_status=v_status,
+                gesture_mode=gesture_mode_val,
+                active_gesture=active_gesture_val,
                 last_subtitle=sub_text,
             )
 
@@ -819,6 +925,7 @@ def main():
         enable_memory=args.memory,
         memory_db=args.memory_db,
         llm_provider=args.llm,
+        enable_gestures=args.gestures,
     )
 
 
