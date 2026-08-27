@@ -91,7 +91,7 @@ class AuraBridge:
         no_ann: bool = False,
         ann_model: str = "models/reliability_ann.pth",
         ann_scaler: str = "models/scaler.pkl",
-        ann_thresh: float = 0.5,
+        ann_thresh: float = 0.25,
         enable_rag: bool = True,
         rag_dir: str = "data/manuals",
         enable_memory: bool = True,
@@ -349,9 +349,30 @@ class AuraBridge:
                         last_infer_latency = (t1_inf - t0_inf) * 1000.0
                 time.sleep(0.005)
 
+        ocr_lock = threading.Lock()
+        def async_ocr_worker():
+            while self._running:
+                if self.ocr_engine is not None:
+                    work_frame = None
+                    with frame_lock:
+                        if latest_camera_frame is not None:
+                            work_frame = latest_camera_frame
+                    if work_frame is not None:
+                        try:
+                            texts = self.ocr_engine.extract_text(work_frame)
+                            with ocr_lock:
+                                self._last_ocr_texts = texts
+                        except Exception as e:
+                            logger.debug(f"Async OCR extract error: {e}")
+                # Scan OCR in background at 1.5s interval without blocking video stream
+                time.sleep(1.5)
+
         if not self._use_synthetic:
             infer_thread = threading.Thread(target=async_inference_worker, daemon=True, name="AURA_Async_Infer")
             infer_thread.start()
+            if self.ocr_engine is not None:
+                ocr_thread = threading.Thread(target=async_ocr_worker, daemon=True, name="AURA_Async_OCR")
+                ocr_thread.start()
 
         while self._running:
             t0 = time.perf_counter()
@@ -399,22 +420,18 @@ class AuraBridge:
                     detections[i].reliability_score = rel_res.score
                     detections[i].reliability_label = rel_res.label
 
-            # 5. Periodic OCR (for camera mode)
-            if (
-                not self._use_synthetic
-                and self.ocr_engine is not None
-                and (frame_count % max(1, self.ocr_stride) == 0)
-            ):
-                self._last_ocr_texts = self.ocr_engine.extract_text(frame)
+            # 5. Non-blocking OCR state sync
+            with ocr_lock:
+                current_ocr_texts = list(self._last_ocr_texts)
 
             # 6. Context update
             object_texts_map: Dict[int, List[TextDetection]] = {}
-            if self._last_ocr_texts and detections:
+            if current_ocr_texts and detections:
                 for idx, det in enumerate(detections):
                     key = det.track_id if det.track_id is not None else idx
                     dx1, dy1, dx2, dy2 = det.bbox
                     matching = []
-                    for t in self._last_ocr_texts:
+                    for t in current_ocr_texts:
                         tcx, tcy = t.center
                         if dx1 <= tcx <= dx2 and dy1 <= tcy <= dy2:
                             matching.append(t)
@@ -423,7 +440,7 @@ class AuraBridge:
 
             scene_context = self.context_manager.update(
                 detections=detections,
-                text_detections=self._last_ocr_texts,
+                text_detections=current_ocr_texts,
                 object_texts=object_texts_map,
                 frame_shape=frame.shape,
             )
