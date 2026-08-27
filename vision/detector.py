@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_AURA_VOCABULARY: List[str] = [
     "human face",
     "human hand",
+    "open palm",
+    "pointing hand",
+    "fist",
+    "thumbs up",
     "person",
     "laptop",
     "notebook",
@@ -47,8 +51,12 @@ DEFAULT_AURA_VOCABULARY: List[str] = [
 DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
     "human face": 0.22,  # High sensitivity for face detection
     "face": 0.22,
-    "human hand": 0.22,  # High sensitivity for hand/gesture detection
+    "human hand": 0.22,  # High sensitivity for hand detection
     "hand": 0.22,
+    "open palm": 0.22,   # Gesture: Clear/Hide all boxes
+    "pointing hand": 0.22,  # Gesture: Focus on pointed object
+    "fist": 0.25,        # Gesture: Freeze overlay
+    "thumbs up": 0.22,   # Gesture: Snapshot confirmation
     "laptop": 0.45,      # High accuracy now that 'notebook' is a distinct class
     "notebook": 0.35,    # Dedicated notebook detection
     "pen": 0.28,         # Fine-object detection
