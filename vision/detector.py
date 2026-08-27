@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Default comprehensive indoor/assistant vocabulary for YOLO-World Open-Vocabulary detection
 DEFAULT_AURA_VOCABULARY: List[str] = [
+    "human face",
+    "human hand",
     "person",
     "laptop",
     "notebook",
@@ -43,10 +45,14 @@ DEFAULT_AURA_VOCABULARY: List[str] = [
 
 # Class-specific confidence thresholds to suppress common hallucinations
 DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
+    "human face": 0.22,  # High sensitivity for face detection
+    "face": 0.22,
+    "human hand": 0.22,  # High sensitivity for hand/gesture detection
+    "hand": 0.22,
     "laptop": 0.45,      # High accuracy now that 'notebook' is a distinct class
     "notebook": 0.35,    # Dedicated notebook detection
     "pen": 0.28,         # Fine-object detection
-    "person": 0.40,      # Prevents floating hands/arms
+    "person": 0.45,      # Full-body / torso detection
     "smartphone": 0.40,  # Clear phone detection
     "headphones": 0.35,  # Audio gear
     "water bottle": 0.35,
@@ -55,6 +61,7 @@ DEFAULT_CLASS_THRESHOLDS: Dict[str, float] = {
     "backpack": 0.40,
     "handbag": 0.40,
     "glasses": 0.28,
+    "wrist watch": 0.28,
 }
 
 
@@ -151,6 +158,31 @@ class DetectorError(Exception):
 class ModelLoadError(DetectorError):
     """Raised when the detection model cannot be loaded."""
     pass
+
+
+def compute_ios(box1: List[float], box2: List[float]) -> float:
+    """
+    Computes Intersection-over-Smaller (IoS) containment metric.
+    IoS = Area(Intersection) / min(Area(box1), Area(box2)).
+    Returns a value in [0.0, 1.0] indicating the extent to which one box is nested within another.
+    """
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+
+    intersection_w = max(0.0, x2 - x1)
+    intersection_h = max(0.0, y2 - y1)
+    intersection_area = intersection_w * intersection_h
+
+    area1 = max(0.0, box1[2] - box1[0]) * max(0.0, box1[3] - box1[1])
+    area2 = max(0.0, box2[2] - box2[0]) * max(0.0, box2[3] - box2[1])
+    min_area = min(area1, area2)
+
+    if min_area <= 1e-6:
+        return 0.0
+
+    return float(intersection_area / min_area)
 
 
 def get_class_color(class_id: int) -> Tuple[int, int, int]:
@@ -341,27 +373,59 @@ class ObjectDetector:
         frame_area = float(img_w * img_h)
         clean_detections: List[Detection] = []
 
+        # Filter 1 & 2: Geometric Anomaly & Chest-Aware Spatial Resolution
         for d in detections:
             w = d.width
             h = d.height
             area = d.area
             norm_area = area / max(frame_area, 1.0)
+            norm_h = h / max(float(img_h), 1.0)
             aspect_ratio = (w / h) if h > 1e-5 else 1.0
 
             # Filter 1: Discard micro-noise (< 100 pixels)
             if area < 100.0:
                 continue
 
-            # Filter 2: Person Anomaly Suppression (Rules out hands, wrists, skin patches)
+            # Chest-Aware Resolution:
+            # - If chest is NOT visible (compact square-like head region, norm_h < 0.42), classify as 'face'
+            # - If chest IS visible (tall bounding box, norm_h >= 0.42), classify as 'person'
             if d.class_name.lower() == "person":
                 if norm_area < 0.02 and d.confidence < 0.88:
                     continue
                 if aspect_ratio > 1.4 and d.confidence < 0.85:
                     continue
+                if norm_h < 0.42 and 0.60 <= aspect_ratio <= 1.35:
+                    d.class_name = "face"
+            elif d.class_name.lower() == "face":
+                if norm_h >= 0.50 and aspect_ratio < 0.85:
+                    d.class_name = "person"
 
             clean_detections.append(d)
 
-        return clean_detections
+        # Filter 3: Nested Containment Suppression
+        # Sort by area descending so full-body / encompassing bounding boxes take precedence
+        sorted_by_area = sorted(clean_detections, key=lambda d: d.area, reverse=True)
+        final_detections: List[Detection] = []
+
+        for cand in sorted_by_area:
+            is_nested_duplicate = False
+            for kept in final_detections:
+                ios = compute_ios(cand.bbox, kept.bbox)
+                # Same class duplicate suppression (>60% containment)
+                if cand.class_name.lower() == kept.class_name.lower() and ios > 0.60:
+                    is_nested_duplicate = True
+                    break
+                # When chest is visible (kept is 'person' with norm_h >= 0.42), suppress inner 'face'
+                if kept.class_name.lower() == "person" and cand.class_name.lower() == "face":
+                    kept_norm_h = kept.height / max(float(img_h), 1.0)
+                    if kept_norm_h >= 0.40 and ios > 0.65:
+                        is_nested_duplicate = True
+                        break
+
+            if not is_nested_duplicate:
+                final_detections.append(cand)
+
+        return final_detections
 
     def _detect_single_frame(
         self,
@@ -419,10 +483,17 @@ class ObjectDetector:
             if c_conf < class_req_conf:
                 continue
 
+            # Clean UI display name
+            display_name = c_name
+            if c_name.lower() in ("human face", "face"):
+                display_name = "face"
+            elif c_name.lower() in ("human hand", "hand"):
+                display_name = "hand"
+
             detections.append(
                 Detection(
                     class_id=c_id,
-                    class_name=c_name,
+                    class_name=display_name,
                     confidence=c_conf,
                     bbox=c_bbox,
                 )
