@@ -86,10 +86,21 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # 1. Instantly Launch Holographic Splash Screen (Sub-50ms)
+    splash = None
+    try:
+        from interface.splash import launch_splash
+        splash = launch_splash()
+    except Exception as e:
+        logger.warning(f"Splash screen fallback: {e}")
+
     logger.info("=" * 60)
     logger.info("  AURA — Adaptive Understanding & Reasoning Architecture")
-    logger.info("  Interactive Web Dashboard v0.9.0")
+    logger.info("  Interactive Web Dashboard v1.0.0")
     logger.info("=" * 60)
+
+    if splash:
+        splash.update_step(0.25, "LOADING NEURAL VISION & MODEL WEIGHTS...")
 
     # Import after arg parse to avoid slow import on --help
     from interface.bridge import AuraBridge
@@ -97,6 +108,9 @@ def main():
 
     # Initialize the pipeline bridge
     logger.info("Initializing AURA Pipeline Bridge...")
+    if splash:
+        splash.update_step(0.50, "CALIBRATING 21-LANDMARK 3D GESTURE SENSORS...")
+
     try:
         bridge = AuraBridge(
             source=args.source,
@@ -111,6 +125,8 @@ def main():
             llm_provider=args.llm,
         )
     except Exception as e:
+        if splash:
+            splash.close()
         logger.error(f"Failed to initialize pipeline: {e}")
         return 1
 
@@ -118,11 +134,24 @@ def main():
     bridge.start()
     logger.info("Vision pipeline started.")
 
-    # Auto-open browser
-    if not args.no_browser:
+    if splash:
+        splash.update_step(0.85, "SYNCHRONIZING WEBSOCKET TELEMETRY CHANNELS...")
+
+    def open_browser_and_dismiss_splash():
         url = f"http://localhost:{args.port}"
         logger.info(f"Opening dashboard at {url}")
-        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+        if splash:
+            splash.update_step(1.00, "SYSTEM READY // LAUNCHING COCKPIT...")
+        webbrowser.open(url)
+        if splash:
+            time.sleep(0.8)
+            splash.close()
+
+    # Auto-open browser
+    if not args.no_browser:
+        threading.Timer(1.0, open_browser_and_dismiss_splash).start()
+    elif splash:
+        threading.Timer(0.8, splash.close).start()
 
     # Start the web server (blocking)
     try:
@@ -130,6 +159,8 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:
+        if splash:
+            splash.close()
         bridge.stop()
 
     return 0

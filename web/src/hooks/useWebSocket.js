@@ -72,6 +72,7 @@ export function useWebSocket(url = null) {
               break;
             case 'config_update':
               setConfigUpdate(msg.data);
+              setTelemetry((prev) => (prev ? { ...prev, ...msg.data } : msg.data));
               break;
             case 'action_toast':
               triggerLocalToast(msg.data?.text);
