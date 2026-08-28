@@ -1,217 +1,134 @@
+import React from 'react';
+
 /**
- * Telemetry Panel — Real-time performance gauges and system status indicators.
+ * ControlDeck (TelemetryPanel) — Cybernetic control deck with real-time performance gauges,
+ * interactive system toggle switches (SAHI, Tracking, OCR, Voice), and pipeline status indicators.
  */
-export default function TelemetryPanel({ telemetry, onToggleSAHI, onToggleTracking }) {
+export default function TelemetryPanel({
+  telemetry,
+  onToggleSAHI,
+  onToggleTracking,
+  onToggleOCR,
+  onToggleVoice,
+}) {
   if (!telemetry) {
     return (
-      <div className="glass-card" style={styles.container}>
-        <div style={styles.inner}>
-          <span style={styles.loadingText}>Connecting to AURA telemetry...</span>
-          <div className="skeleton" style={{ width: '180px', height: '6px' }} />
+      <div className="control-deck glass-card">
+        <div className="deck-loading">
+          <span className="loading-text">Synchronizing AURA Telemetry Stream...</span>
+          <div className="skeleton" style={{ width: '240px', height: '8px' }} />
         </div>
       </div>
     );
   }
 
-  const fpsColor = telemetry.fps >= 25 ? 'var(--accent-emerald)' :
-                   telemetry.fps >= 15 ? 'var(--accent-amber)' : 'var(--accent-red)';
-
-  const latencyColor = telemetry.inference_latency_ms <= 50 ? 'var(--accent-emerald)' :
-                       telemetry.inference_latency_ms <= 150 ? 'var(--accent-amber)' : 'var(--accent-red)';
+  const fps = telemetry.fps || 0;
+  const latency = telemetry.inference_latency_ms || 0;
+  const isSAHI = telemetry.sahi_enabled ?? false;
+  const isTracking = telemetry.tracking_enabled ?? true;
+  const isOCR = telemetry.ocr_enabled ?? true;
+  const isVoice = telemetry.voice_listening || telemetry.voice_status === 'LISTENING';
 
   return (
-    <div className="glass-card" style={styles.container}>
-      <div style={styles.inner}>
-
-        {/* FPS Gauge */}
-        <div style={styles.metric}>
-          <div style={styles.metricValue}>
-            <svg width="38" height="38" viewBox="0 0 38 38">
-              <circle cx="19" cy="19" r="16" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+    <div className="control-deck glass-card">
+      <div className="deck-content">
+        {/* ── Left Metrics Group ── */}
+        <div className="deck-metrics-group">
+          {/* Radial FPS Meter */}
+          <div className="deck-metric-gauge">
+            <svg width="42" height="42" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="17" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
               <circle
-                cx="19" cy="19" r="16" fill="none"
-                stroke={fpsColor}
-                strokeWidth="3"
-                strokeDasharray={`${Math.min(100, (telemetry.fps / 60) * 100)} 100`}
+                cx="21" cy="21" r="17" fill="none"
+                stroke={fps >= 25 ? 'var(--accent-emerald)' : fps >= 15 ? 'var(--accent-amber)' : 'var(--accent-red)'}
+                strokeWidth="3.2"
+                strokeDasharray={`${Math.min(100, (fps / 60) * 107)} 107`}
                 strokeLinecap="round"
-                transform="rotate(-90 19 19)"
-                style={{ filter: `drop-shadow(0 0 4px ${fpsColor})`, transition: 'stroke-dasharray 0.5s ease' }}
+                transform="rotate(-90 21 21)"
+                style={{
+                  filter: `drop-shadow(0 0 6px ${fps >= 25 ? 'var(--accent-emerald)' : 'var(--accent-amber)'})`,
+                  transition: 'stroke-dasharray 0.4s ease',
+                }}
               />
-              <text x="19" y="22" textAnchor="middle" fill={fpsColor}
-                    style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', fontWeight: 600 }}>
-                {telemetry.fps.toFixed(0)}
+              <text x="21" y="25" textAnchor="middle" fill="#fff" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', fontWeight: 700 }}>
+                {Math.round(fps)}
               </text>
             </svg>
+            <div className="metric-meta">
+              <span className="metric-title">FPS</span>
+              <span className="metric-subtitle">TARGET 60</span>
+            </div>
           </div>
-          <span style={styles.metricLabel}>FPS</span>
+
+          {/* Inference Latency */}
+          <div className="deck-metric-card">
+            <span className="metric-val metric-val-cyan">{latency.toFixed(1)} <small>ms</small></span>
+            <span className="metric-title">GPU LATENCY</span>
+          </div>
+
+          {/* Detections & Tracks */}
+          <div className="deck-metric-card">
+            <span className="metric-val metric-val-emerald">{telemetry.detection_count}</span>
+            <span className="metric-title">OBJECTS</span>
+          </div>
+
+          <div className="deck-metric-card">
+            <span className="metric-val metric-val-violet">{telemetry.active_tracks}</span>
+            <span className="metric-title">TRACKS</span>
+          </div>
+
+          <div className="deck-metric-card">
+            <span className="metric-val metric-val-amber">{telemetry.ocr_text_count}</span>
+            <span className="metric-title">OCR TEXTS</span>
+          </div>
         </div>
 
-        {/* Inference Latency */}
-        <div style={styles.metric}>
-          <span style={{ ...styles.metricNumber, color: latencyColor }}>
-            {telemetry.inference_latency_ms.toFixed(0)}
-          </span>
-          <span style={styles.metricUnit}>ms</span>
-          <span style={styles.metricLabel}>Latency</span>
-        </div>
+        {/* ── Center Divider ── */}
+        <div className="deck-divider" />
 
-        {/* Detections */}
-        <div style={styles.metric}>
-          <span style={{ ...styles.metricNumber, color: 'var(--accent-cyan)' }}>
-            {telemetry.detection_count}
-          </span>
-          <span style={styles.metricLabel}>Detections</span>
-        </div>
+        {/* ── Right Interactive Switches ── */}
+        <div className="deck-switches-group">
+          {/* SAHI Switch */}
+          <label className="cyber-switch" title="Toggle SAHI Sliced High-Resolution Inference (🤘 Rock On)">
+            <input type="checkbox" checked={isSAHI} onChange={onToggleSAHI} id="switch-sahi" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🤘 SAHI High-Res</span>
+              <span className="switch-status">{isSAHI ? 'ENABLED' : 'OFF'}</span>
+            </div>
+          </label>
 
-        {/* Active Tracks */}
-        <div style={styles.metric}>
-          <span style={{ ...styles.metricNumber, color: 'var(--accent-emerald)' }}>
-            {telemetry.active_tracks}
-          </span>
-          <span style={styles.metricLabel}>Tracks</span>
-        </div>
+          {/* Tracking Switch */}
+          <label className="cyber-switch" title="Toggle Spatial Object Tracking">
+            <input type="checkbox" checked={isTracking} onChange={onToggleTracking} id="switch-tracking" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🎯 Tracker</span>
+              <span className="switch-status">{isTracking ? 'ENABLED' : 'OFF'}</span>
+            </div>
+          </label>
 
-        {/* OCR Texts */}
-        <div style={styles.metric}>
-          <span style={{ ...styles.metricNumber, color: 'var(--accent-violet)' }}>
-            {telemetry.ocr_text_count}
-          </span>
-          <span style={styles.metricLabel}>OCR</span>
-        </div>
+          {/* OCR Switch */}
+          <label className="cyber-switch" title="Toggle Asynchronous OCR Text Scanner">
+            <input type="checkbox" checked={isOCR} onChange={onToggleOCR} id="switch-ocr" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🔍 OCR Scanner</span>
+              <span className="switch-status">{isOCR ? 'ACTIVE' : 'OFF'}</span>
+            </div>
+          </label>
 
-        <div style={styles.divider} />
-
-        {/* SAHI Toggle */}
-        <button
-          style={{
-            ...styles.toggleBtn,
-            ...(telemetry.sahi_enabled ? styles.toggleActive : {}),
-          }}
-          onClick={onToggleSAHI}
-          title="Toggle SAHI Sliced Inference"
-          id="toggle-sahi-btn"
-        >
-          <span style={styles.toggleDot(telemetry.sahi_enabled)} />
-          SAHI
-        </button>
-
-        {/* Tracking Toggle */}
-        <button
-          style={{
-            ...styles.toggleBtn,
-            ...(telemetry.tracking_enabled ? styles.toggleActive : {}),
-          }}
-          onClick={onToggleTracking}
-          title="Toggle Multi-Object Tracking"
-          id="toggle-tracking-btn"
-        >
-          <span style={styles.toggleDot(telemetry.tracking_enabled)} />
-          Tracking
-        </button>
-
-        {/* ANN Version */}
-        <div style={styles.metric}>
-          <span className="badge badge-emerald" style={{ fontSize: '0.6rem' }}>
-            {telemetry.ann_version || 'ANN'}
-          </span>
-          <span style={styles.metricLabel}>Reliability</span>
-        </div>
-
-        {/* Frame Counter */}
-        <div style={styles.metric}>
-          <span style={{ ...styles.metricNumber, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            #{telemetry.frame_count}
-          </span>
-          <span style={styles.metricLabel}>Frame</span>
+          {/* Voice Switch */}
+          <label className="cyber-switch" title="Toggle Voice Assistant Speech Querying (🤙 Call Me)">
+            <input type="checkbox" checked={isVoice} onChange={onToggleVoice} id="switch-voice" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🤙 Voice Assistant</span>
+              <span className="switch-status">{isVoice ? 'LISTENING' : 'PAUSED'}</span>
+            </div>
+          </label>
         </div>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  inner: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '20px',
-    padding: '10px 20px',
-    overflowX: 'auto',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-  loadingText: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-  },
-  metric: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '2px',
-    minWidth: '48px',
-  },
-  metricValue: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  metricNumber: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '1.1rem',
-    fontWeight: 600,
-    lineHeight: 1,
-  },
-  metricUnit: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.6rem',
-    color: 'var(--text-muted)',
-    marginTop: '-2px',
-  },
-  metricLabel: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '0.58rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  },
-  divider: {
-    width: '1px',
-    height: '32px',
-    background: 'rgba(255,255,255,0.08)',
-    flexShrink: 0,
-  },
-  toggleBtn: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.68rem',
-    fontWeight: 500,
-    padding: '5px 12px',
-    borderRadius: 'var(--radius-full)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.04)',
-    color: 'var(--text-muted)',
-    cursor: 'pointer',
-    transition: 'all var(--transition-fast)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  toggleActive: {
-    borderColor: 'rgba(0, 240, 255, 0.4)',
-    background: 'rgba(0, 240, 255, 0.1)',
-    color: 'var(--accent-cyan)',
-    boxShadow: '0 0 12px rgba(0, 240, 255, 0.15)',
-  },
-  toggleDot: (active) => ({
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    background: active ? 'var(--accent-cyan)' : 'var(--text-muted)',
-    boxShadow: active ? '0 0 6px var(--accent-cyan)' : 'none',
-    transition: 'all var(--transition-fast)',
-  }),
-};
