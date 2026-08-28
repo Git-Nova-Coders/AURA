@@ -94,6 +94,31 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             "data": {"tracking_enabled": new_state},
                         }))
 
+                elif msg_type == "toggle_ocr":
+                    if _bridge:
+                        new_state = _bridge.toggle_ocr()
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"ocr_enabled": new_state},
+                        }))
+
+                elif msg_type == "toggle_voice":
+                    if _bridge:
+                        new_state = _bridge.toggle_voice()
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"voice_listening": new_state},
+                        }))
+
+                elif msg_type == "inspect_entity":
+                    query = msg.get("query", "")
+                    if _bridge:
+                        result = _bridge.inspect_target(query)
+                        await websocket.send_text(json.dumps({
+                            "type": "inspect_response",
+                            "data": result,
+                        }))
+
                 elif msg_type == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
 
@@ -115,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 
 async def _stream_frames(websocket: WebSocket) -> None:
-    """Streams annotated video frames as base64 JPEG at ~15 FPS."""
+    """Streams annotated video frames as base64 JPEG at ~25 FPS."""
     try:
         while True:
             if _bridge:
@@ -125,7 +150,7 @@ async def _stream_frames(websocket: WebSocket) -> None:
                         "type": "frame",
                         "data": frame_b64,
                     }))
-            await asyncio.sleep(1.0 / 15.0)  # ~15 FPS streaming to browser
+            await asyncio.sleep(1.0 / 25.0)  # ~25 FPS streaming to browser
     except asyncio.CancelledError:
         pass
     except Exception:
@@ -133,7 +158,7 @@ async def _stream_frames(websocket: WebSocket) -> None:
 
 
 async def _stream_telemetry(websocket: WebSocket) -> None:
-    """Streams telemetry snapshots every 500ms."""
+    """Streams telemetry snapshots every 100ms (10 Hz) for real-time responsiveness."""
     try:
         while True:
             if _bridge:
@@ -142,7 +167,11 @@ async def _stream_telemetry(websocket: WebSocket) -> None:
                     "type": "telemetry",
                     "data": telemetry,
                 }))
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)  # 100ms update rate
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
     except asyncio.CancelledError:
         pass
     except Exception:
