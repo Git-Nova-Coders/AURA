@@ -51,7 +51,7 @@ class IntentClassifier:
     """
 
     KNOWN_OBJECTS = [
-        "person", "laptop", "cell phone", "phone", "smartphone", "mouse", "keyboard", "book",
+        "person", "face", "laptop", "cell phone", "phone", "smartphone", "mouse", "keyboard", "book",
         "bottle", "cup", "chair", "tv", "monitor", "backpack", "pen", "pencil", "notebook",
         "clock", "vase", "potted plant", "plant", "dining table", "table", "desk",
         "headphones", "glasses", "water bottle", "handbag", "it", "that", "this", "object"

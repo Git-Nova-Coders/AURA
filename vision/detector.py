@@ -404,9 +404,11 @@ class ObjectDetector:
                     continue
                 if norm_h < 0.42 and 0.60 <= aspect_ratio <= 1.35:
                     d.class_name = "face"
-            elif d.class_name.lower() == "face":
+            elif d.class_name.lower() in ("face", "human face"):
                 if norm_h >= 0.50 and aspect_ratio < 0.85:
                     d.class_name = "person"
+                else:
+                    d.class_name = "face"
 
             clean_detections.append(d)
 
@@ -423,12 +425,7 @@ class ObjectDetector:
                 if cand.class_name.lower() == kept.class_name.lower() and ios > 0.60:
                     is_nested_duplicate = True
                     break
-                # When chest is visible (kept is 'person' with norm_h >= 0.42), suppress inner 'face'
-                if kept.class_name.lower() == "person" and cand.class_name.lower() == "face":
-                    kept_norm_h = kept.height / max(float(img_h), 1.0)
-                    if kept_norm_h >= 0.40 and ios > 0.65:
-                        is_nested_duplicate = True
-                        break
+                # Do NOT suppress 'face' nested within 'person' so both can be displayed
 
             if not is_nested_duplicate:
                 final_detections.append(cand)
