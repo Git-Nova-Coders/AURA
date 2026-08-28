@@ -238,7 +238,7 @@ class ConversationEngine:
             )
 
         if target_name:
-            count = scene.class_counts.get(target_name.lower(), 0)
+            count = scene.object_counts.get(target_name.lower(), 0)
             text = f"I count {count} {target_name}{'s' if count != 1 else ''} in the current frame."
         else:
             total = len(scene.entities)

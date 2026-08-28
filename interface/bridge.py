@@ -339,6 +339,7 @@ class AuraBridge:
             Detection(class_id=1, class_name="laptop", confidence=0.91, bbox=[float(lx - 68), float(ly - 50), float(lx + 68), float(ly + 45)]),
             Detection(class_id=2, class_name="notebook", confidence=0.88, bbox=[float(nx - 45), float(ny - 35), float(nx + 45), float(ny + 40)]),
             Detection(class_id=3, class_name="bottle", confidence=0.84, bbox=[float(bx - 15), float(by - 35), float(bx + 15), float(by + 30)]),
+            Detection(class_id=4, class_name="face", confidence=0.90, bbox=[float(cx - 20), float(cy - 110), float(cx + 20), float(cy - 80)]),
         ]
 
         synth_texts = [
@@ -711,7 +712,7 @@ class AuraBridge:
             return []
         # Query common object classes
         all_events = []
-        for cls in ["person", "laptop", "notebook", "phone", "cup", "bottle", "book"]:
+        for cls in ["face", "person", "laptop", "notebook", "phone", "cup", "bottle", "book"]:
             events = self.episodic_memory.get_history(cls, limit=5)
             all_events.extend(events)
         # Sort by timestamp descending, dedupe by id

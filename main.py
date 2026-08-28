@@ -823,7 +823,7 @@ def run_pipeline(
                 elif key in (ord('m'), ord('M')):
                     if enable_memory and episodic_memory:
                         print("\n[Episodic Memory - Recent Events]")
-                        events = episodic_memory.get_history("person", limit=3) + episodic_memory.get_history("laptop", limit=3)
+                        events = episodic_memory.get_history("face", limit=3) + episodic_memory.get_history("person", limit=3) + episodic_memory.get_history("laptop", limit=3)
                         for ev in events:
                             print(f" - {ev.describe()}")
                         print()

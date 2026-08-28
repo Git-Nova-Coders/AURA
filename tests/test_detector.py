@@ -136,6 +136,22 @@ class TestObjectDetector(unittest.TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0], valid_person)
 
+    def test_face_detection_shows_face_not_person(self):
+        """Verify that face detections display as 'face' and person stays as 'person'."""
+        detector = ObjectDetector(model_name="yolo11n.pt", confidence_threshold=0.25, enable_geometric_filter=True)
+        
+        # A full-body person box and an overlapping face box
+        person_box = Detection(class_id=0, class_name="person", confidence=0.88, bbox=[100.0, 50.0, 250.0, 350.0])
+        face_box = Detection(class_id=1, class_name="human face", confidence=0.85, bbox=[150.0, 60.0, 200.0, 120.0])
+        
+        filtered = detector._filter_geometric_anomalies([person_box, face_box], img_w=640, img_h=480)
+        
+        # Both should survive: person stays as person, face is normalized to "face"
+        class_names = sorted([d.class_name for d in filtered])
+        self.assertIn("person", class_names)
+        self.assertIn("face", class_names)
+        self.assertEqual(len(filtered), 2)
+
     def test_yolo_world_custom_vocabulary(self):
         """Verify YOLO-World can be initialized with custom classes like notebook and pen."""
         custom_classes = ["notebook", "pen", "laptop", "person"]
