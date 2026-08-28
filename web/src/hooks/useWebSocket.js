@@ -12,13 +12,24 @@ export function useWebSocket(url = null) {
   const [chatResponse, setChatResponse] = useState(null);
   const [ragResponse, setRagResponse] = useState(null);
   const [memoryResponse, setMemoryResponse] = useState(null);
+  const [inspectResponse, setInspectResponse] = useState(null);
   const [configUpdate, setConfigUpdate] = useState(null);
+  const [activeToast, setActiveToast] = useState(null);
 
   const wsRef = useRef(null);
   const reconnectTimer = useRef(null);
   const reconnectDelay = useRef(1000);
+  const toastTimeoutRef = useRef(null);
 
   const wsUrl = url || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+
+  const triggerLocalToast = useCallback((text, duration = 2500) => {
+    setActiveToast(text);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setActiveToast(null);
+    }, duration);
+  }, []);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -40,6 +51,9 @@ export function useWebSocket(url = null) {
               break;
             case 'telemetry':
               setTelemetry(msg.data);
+              if (msg.data?.active_toast) {
+                triggerLocalToast(msg.data.active_toast);
+              }
               break;
             case 'scene':
               setScene(msg.data);
@@ -53,8 +67,14 @@ export function useWebSocket(url = null) {
             case 'memory_response':
               setMemoryResponse(msg.data);
               break;
+            case 'inspect_response':
+              setInspectResponse(msg.data);
+              break;
             case 'config_update':
               setConfigUpdate(msg.data);
+              break;
+            case 'action_toast':
+              triggerLocalToast(msg.data?.text);
               break;
             case 'pong':
               break;
@@ -69,7 +89,6 @@ export function useWebSocket(url = null) {
       ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
-        // Auto-reconnect with exponential backoff
         reconnectTimer.current = setTimeout(() => {
           reconnectDelay.current = Math.min(reconnectDelay.current * 1.5, 10000);
           connect();
@@ -82,14 +101,15 @@ export function useWebSocket(url = null) {
 
       wsRef.current = ws;
     } catch {
-      // Connection failed, will retry
+      // Connection failed
     }
-  }, [wsUrl]);
+  }, [wsUrl, triggerLocalToast]);
 
   useEffect(() => {
     connect();
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       if (wsRef.current) wsRef.current.close();
     };
   }, [connect]);
@@ -112,12 +132,24 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'memory_search', query });
   }, [sendMessage]);
 
+  const inspectEntity = useCallback((query) => {
+    sendMessage({ type: 'inspect_entity', query });
+  }, [sendMessage]);
+
   const toggleSAHI = useCallback(() => {
     sendMessage({ type: 'toggle_sahi' });
   }, [sendMessage]);
 
   const toggleTracking = useCallback(() => {
     sendMessage({ type: 'toggle_tracking' });
+  }, [sendMessage]);
+
+  const toggleOCR = useCallback(() => {
+    sendMessage({ type: 'toggle_ocr' });
+  }, [sendMessage]);
+
+  const toggleVoice = useCallback(() => {
+    sendMessage({ type: 'toggle_voice' });
   }, [sendMessage]);
 
   return {
@@ -128,12 +160,18 @@ export function useWebSocket(url = null) {
     chatResponse,
     ragResponse,
     memoryResponse,
+    inspectResponse,
     configUpdate,
+    activeToast,
+    triggerLocalToast,
     sendChat,
     searchRAG,
     searchMemory,
+    inspectEntity,
     toggleSAHI,
     toggleTracking,
+    toggleOCR,
+    toggleVoice,
     sendMessage,
   };
 }
