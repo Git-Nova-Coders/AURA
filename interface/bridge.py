@@ -52,6 +52,8 @@ class TelemetrySnapshot:
     ocr_text_count: int = 0
     sahi_enabled: bool = False
     tracking_enabled: bool = True
+    ocr_enabled: bool = True
+    voice_listening: bool = False
     ann_version: Optional[str] = None
     voice_status: str = "OFF"
     memory_enabled: bool = False
@@ -59,6 +61,8 @@ class TelemetrySnapshot:
     gesture_mode: str = "ALL_OBJECTS"
     active_gesture: str = "none"
     pointed_target: Optional[str] = None
+    pointed_target_bbox: Optional[List[float]] = None
+    active_toast: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -71,6 +75,8 @@ class TelemetrySnapshot:
             "ocr_text_count": self.ocr_text_count,
             "sahi_enabled": self.sahi_enabled,
             "tracking_enabled": self.tracking_enabled,
+            "ocr_enabled": self.ocr_enabled,
+            "voice_listening": self.voice_listening,
             "ann_version": self.ann_version,
             "voice_status": self.voice_status,
             "memory_enabled": self.memory_enabled,
@@ -78,6 +84,8 @@ class TelemetrySnapshot:
             "gesture_mode": self.gesture_mode,
             "active_gesture": self.active_gesture,
             "pointed_target": self.pointed_target,
+            "pointed_target_bbox": self.pointed_target_bbox,
+            "active_toast": self.active_toast,
             "timestamp": round(self.timestamp, 2),
         }
 
@@ -213,6 +221,8 @@ class AuraBridge:
 
         # Tracking state
         self._tracking_enabled = True
+        self._ocr_enabled = enable_ocr
+        self._voice_listening = False
         self._enable_memory = enable_memory
         self._enable_rag = enable_rag
 
@@ -556,6 +566,15 @@ class AuraBridge:
                 self._latest_annotated_jpeg = jpeg_buf.tobytes()
                 self._latest_scene = scene_context
                 self._latest_detections = list(visible_detections)
+                
+                toast_str = (
+                    self.gesture_controller.active_toast
+                    if (self.gesture_controller.active_toast and time.time() < self.gesture_controller.toast_expiry_time)
+                    else None
+                )
+
+                target_bbox = pointed_target.bbox if pointed_target else None
+
                 self._telemetry = TelemetrySnapshot(
                     fps=fps_ema,
                     inference_latency_ms=infer_latency_ms,
@@ -565,12 +584,16 @@ class AuraBridge:
                     ocr_text_count=ocr_count,
                     sahi_enabled=sahi_active,
                     tracking_enabled=self._tracking_enabled,
+                    ocr_enabled=self._ocr_enabled,
+                    voice_listening=self._voice_listening,
                     ann_version=self.reliability_ann.model_version,
                     memory_enabled=self._enable_memory,
                     rag_enabled=self._enable_rag,
                     gesture_mode=gesture_mode.value,
                     active_gesture=active_gesture.gesture.value,
                     pointed_target=pointed_target.class_name if pointed_target else None,
+                    pointed_target_bbox=target_bbox,
+                    active_toast=toast_str,
                 )
 
             frame_count += 1
@@ -707,27 +730,63 @@ class AuraBridge:
         """Toggles SAHI on/off and returns new state."""
         if self.detector.sahi_config and self.detector.sahi_config.enabled:
             self.detector.disable_sahi()
+            self.gesture_controller.trigger_toast("SAHI DISABLED", duration=1.5)
             return False
         else:
             self.detector.enable_sahi()
+            self.gesture_controller.trigger_toast("🤘 SAHI HIGH-RES ENABLED (320px Slices)", duration=2.0)
             return True
 
     def toggle_tracking(self) -> bool:
         """Toggles tracking on/off and returns new state."""
         self._tracking_enabled = not self._tracking_enabled
+        state_str = "ENABLED" if self._tracking_enabled else "DISABLED"
+        self.gesture_controller.trigger_toast(f"TRACKING {state_str}", duration=1.5)
         return self._tracking_enabled
+
+    def toggle_ocr(self) -> bool:
+        """Toggles OCR on/off and returns new state."""
+        self._ocr_enabled = not self._ocr_enabled
+        state_str = "ENABLED" if self._ocr_enabled else "DISABLED"
+        self.gesture_controller.trigger_toast(f"OCR TEXT SCANNER {state_str}", duration=1.5)
+        return self._ocr_enabled
+
+    def toggle_voice(self) -> bool:
+        """Toggles Voice Assistant listening mode."""
+        self._voice_listening = not self._voice_listening
+        state_str = "LISTENING..." if self._voice_listening else "PAUSED"
+        self.gesture_controller.trigger_toast(f"🤙 VOICE ASSISTANT {state_str}", duration=1.8)
+        return self._voice_listening
+
+    def inspect_target(self, query_override: Optional[str] = None) -> Dict[str, Any]:
+        """Inspects the currently locked or targeted object with Multimodal AI reasoning."""
+        with self._lock:
+            target_name = self._telemetry.pointed_target if self._telemetry else None
+            scene = self._latest_scene
+
+        target_str = query_override or target_name or "object"
+        prompt = f"Inspect and explain this {target_str} in detail, including its function, context in the scene, and related knowledge."
+        
+        response = self.send_chat(prompt)
+        self.gesture_controller.trigger_toast(f"👌 INSPECTED: {target_str.upper()}", duration=2.0)
+        return {
+            "target": target_str,
+            "response": response,
+            "timestamp": time.time(),
+        }
 
     def get_status(self) -> Dict[str, Any]:
         """Returns overall system status."""
         return {
-            "version": "0.9.0",
+            "version": "0.9.5",
             "pipeline_running": self._running,
             "source": self.source,
             "tracking_enabled": self._tracking_enabled,
             "sahi_enabled": bool(
                 self.detector.sahi_config and self.detector.sahi_config.enabled
             ),
-            "ocr_enabled": self.ocr_engine is not None,
+            "ocr_enabled": self._ocr_enabled,
+            "voice_listening": self._voice_listening,
             "rag_enabled": self._enable_rag,
             "memory_enabled": self._enable_memory,
             "ann_version": self.reliability_ann.model_version,
