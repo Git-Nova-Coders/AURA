@@ -1,96 +1,87 @@
 import { useState, useCallback } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
-import BrandHeader from './components/BrandHeader';
-import LiveFeed from './components/LiveFeed';
-import SpatialRadar from './components/SpatialRadar';
-import ChatHub from './components/ChatHub';
-import MemoryTimeline from './components/MemoryTimeline';
-import RAGDrawer from './components/RAGDrawer';
-import TelemetryPanel from './components/TelemetryPanel';
+import CyberBackground from './components/CyberBackground';
+import HoloHeader from './components/HoloHeader';
+import TacticalViewport from './components/TacticalViewport';
+import EntityMatrix from './components/EntityMatrix';
+import NeuralTerminal from './components/NeuralTerminal';
+import TacticalDeck from './components/TacticalDeck';
+import HoloGuideModal from './components/HoloGuideModal';
 import './App.css';
 
 /**
- * AURA Dashboard — Main Application Layout
- * 3-column grid: Left (Radar + Memory) | Center (Feed) | Right (Chat + RAG)
- * Bottom: Telemetry bar
+ * AURA Master Cybernetic Command Center & 3D Gesture Matrix
+ * AAA Sci-Fi Aerospace HUD Layout
  */
 export default function App() {
   const ws = useWebSocket();
-  const [rightTab, setRightTab] = useState('chat'); // 'chat' | 'rag'
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState(null);
 
-  // Handle object click on Live Feed → trigger knowledge lookup via chat
-  const handleObjectClick = useCallback((entity) => {
-    const query = `Tell me about the ${entity.class_name}`;
-    ws.sendChat(query);
-    setRightTab('chat');
+  // Handle entity selection via click or pinch gesture
+  const handleSelectEntity = useCallback((entity) => {
+    setSelectedEntity(entity);
+    ws.inspectEntity(entity.class_name);
   }, [ws]);
 
   return (
-    <div className="dashboard">
-      {/* ── Header ── */}
-      <div className="dashboard-header">
-        <BrandHeader isConnected={ws.isConnected} telemetry={ws.telemetry} />
-      </div>
+    <>
+      {/* ── 0. Cyber Particle Background Canvas ── */}
+      <CyberBackground />
 
-      {/* ── Left Column: Spatial Radar + Memory Timeline ── */}
-      <div className="dashboard-left">
-        <SpatialRadar scene={ws.scene} />
-        <MemoryTimeline memoryResponse={ws.memoryResponse} />
-      </div>
+      {/* ── Master HUD Grid ── */}
+      <div className="aura-command-center">
+        {/* ── 1. Top Aerospace Telemetry Header ── */}
+        <HoloHeader
+          isConnected={ws.isConnected}
+          telemetry={ws.telemetry}
+          onOpenGuide={() => setIsGuideOpen(true)}
+        />
 
-      {/* ── Center: Live Video Feed ── */}
-      <div className="dashboard-center">
-        <LiveFeed
+        {/* ── 2. Left Wing: Spatial Scene Matrix & Holographic Radar ── */}
+        <EntityMatrix
+          scene={ws.scene}
+          pointedTarget={ws.telemetry?.pointed_target}
+          onSelectEntity={handleSelectEntity}
+        />
+
+        {/* ── 3. Centerpiece: Tactical Vision Perception Viewport ── */}
+        <TacticalViewport
           frame={ws.lastFrame}
           scene={ws.scene}
-          onObjectClick={handleObjectClick}
+          telemetry={ws.telemetry}
+          activeToast={ws.activeToast}
+          onObjectClick={handleSelectEntity}
+          onOpenGuide={() => setIsGuideOpen(true)}
         />
-      </div>
 
-      {/* ── Right Column: Chat + RAG (Tabbed) ── */}
-      <div className="dashboard-right">
-        {/* Tab Switcher */}
-        <div className="tab-bar glass-card">
-          <button
-            className={`tab-btn ${rightTab === 'chat' ? 'tab-active' : ''}`}
-            onClick={() => setRightTab('chat')}
-            id="tab-chat"
-          >
-            💬 Chat Hub
-          </button>
-          <button
-            className={`tab-btn ${rightTab === 'rag' ? 'tab-active' : ''}`}
-            onClick={() => setRightTab('rag')}
-            id="tab-rag"
-          >
-            📚 RAG Search
-          </button>
-        </div>
+        {/* ── 4. Right Wing: Neural Intelligence & Multimodal Terminal ── */}
+        <NeuralTerminal
+          onSendChat={ws.sendChat}
+          chatResponse={ws.chatResponse}
+          ragResponse={ws.ragResponse}
+          onSearchRAG={ws.searchRAG}
+          selectedEntity={selectedEntity}
+          inspectResponse={ws.inspectResponse}
+          isVoiceListening={ws.telemetry?.voice_listening}
+        />
 
-        {/* Tab Content */}
-        <div className="tab-content">
-          {rightTab === 'chat' ? (
-            <ChatHub
-              onSendChat={ws.sendChat}
-              chatResponse={ws.chatResponse}
-            />
-          ) : (
-            <RAGDrawer
-              onSearchRAG={ws.searchRAG}
-              ragResponse={ws.ragResponse}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* ── Footer: Telemetry Bar ── */}
-      <div className="dashboard-footer">
-        <TelemetryPanel
+        {/* ── 5. Bottom Deck: Tactical Control Matrix & LED Switches ── */}
+        <TacticalDeck
           telemetry={ws.telemetry}
           onToggleSAHI={ws.toggleSAHI}
           onToggleTracking={ws.toggleTracking}
+          onToggleOCR={ws.toggleOCR}
+          onToggleVoice={ws.toggleVoice}
+        />
+
+        {/* ── 6. Holographic Gesture Command Manual Modal ── */}
+        <HoloGuideModal
+          isOpen={isGuideOpen}
+          onClose={() => setIsGuideOpen(false)}
+          activeGesture={ws.telemetry?.active_gesture}
         />
       </div>
-    </div>
+    </>
   );
 }

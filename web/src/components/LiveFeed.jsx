@@ -1,13 +1,18 @@
 import { useRef, useEffect, useState } from 'react';
+import ActiveStateBanners from './ActiveStateBanners';
+import GestureHUD from './GestureHUD';
 
 /**
- * Live Video Feed — Renders MJPEG stream with interactive detection overlays.
+ * Live Video Feed — Renders real-time video stream with holographic HUD scanlines,
+ * interactive 3D gesture HUD overlays, state toggle banners, and target entity inspection.
  */
-export default function LiveFeed({ frame, scene, onObjectClick }) {
+export default function LiveFeed({ frame, scene, telemetry, activeToast, onObjectClick, onOpenGuide }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(new Image());
   const [hoveredEntity, setHoveredEntity] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ w: 640, h: 480 });
+
+  const isFrozen = telemetry?.gesture_mode === 'FROZEN';
 
   // Draw frame onto canvas
   useEffect(() => {
@@ -47,7 +52,10 @@ export default function LiveFeed({ frame, scene, onObjectClick }) {
   };
 
   const handleCanvasMove = (e) => {
-    if (!scene?.entities?.length) { setHoveredEntity(null); return; }
+    if (!scene?.entities?.length) {
+      setHoveredEntity(null);
+      return;
+    }
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -67,138 +75,63 @@ export default function LiveFeed({ frame, scene, onObjectClick }) {
   };
 
   return (
-    <div style={styles.container} className="glass-card">
-      <div style={styles.titleBar}>
-        <span className="panel-title"><span className="icon">📹</span> Live Visual Perception Feed</span>
-        {scene && (
-          <span className="badge badge-cyan">{scene.entity_count || 0} objects</span>
-        )}
+    <div className={`live-feed-card glass-card ${isFrozen ? 'frozen-overlay' : ''}`}>
+      {/* ── Title Bar ── */}
+      <div className="feed-title-bar">
+        <div className="feed-title-left">
+          <span className="feed-icon">📹</span>
+          <span className="panel-title">Cybernetic Perception Feed</span>
+          {isFrozen && <span className="badge badge-cyan">❄️ FROZEN</span>}
+        </div>
+        <div className="feed-title-right">
+          {scene && (
+            <span className="badge badge-cyan">{scene.entity_count || 0} Entities</span>
+          )}
+          {telemetry?.ocr_text_count > 0 && (
+            <span className="badge badge-emerald">{telemetry.ocr_text_count} OCR Texts</span>
+          )}
+        </div>
       </div>
 
-      <div style={styles.feedWrapper}>
+      {/* ── Video Viewport & Overlays ── */}
+      <div className="feed-viewport">
+        {/* Real-time State Banners (SAHI, Voice, Freeze, Toasts) */}
+        <ActiveStateBanners telemetry={telemetry} activeToast={activeToast} />
+
+        {/* Scanlines Effect */}
+        <div className="scanlines" />
+
         {frame ? (
           <canvas
             ref={canvasRef}
-            style={styles.canvas}
+            className="feed-canvas"
             onClick={handleCanvasClick}
             onMouseMove={handleCanvasMove}
             onMouseLeave={() => setHoveredEntity(null)}
           />
         ) : (
-          <div style={styles.placeholder}>
-            <div style={styles.placeholderIcon}>◉</div>
-            <p style={styles.placeholderText}>Connecting to AURA vision pipeline...</p>
-            <div className="skeleton" style={{ width: '200px', height: '8px', marginTop: '12px' }} />
+          <div className="feed-placeholder">
+            <div className="placeholder-beacon animate-pulse">⬢</div>
+            <p className="placeholder-text">Establishing neural link to AURA pipeline...</p>
+            <div className="skeleton" style={{ width: '220px', height: '8px', marginTop: '14px' }} />
           </div>
         )}
 
-        {/* Hover tooltip */}
+        {/* Floating 3D Gesture HUD Pill */}
+        <GestureHUD telemetry={telemetry} onOpenGuide={onOpenGuide} />
+
+        {/* Hover Tooltip */}
         {hoveredEntity && (
-          <div style={styles.tooltip} className="animate-fade-in">
-            <span style={styles.tooltipName}>{hoveredEntity.class_name}</span>
+          <div className="entity-hover-tooltip animate-fade-in">
+            <span className="tooltip-title">{hoveredEntity.class_name.toUpperCase()}</span>
             {hoveredEntity.track_id != null && (
-              <span className="badge badge-cyan">#{hoveredEntity.track_id}</span>
+              <span className="badge badge-cyan">ID #{hoveredEntity.track_id}</span>
             )}
-            <span className="badge badge-emerald">{(hoveredEntity.confidence * 100).toFixed(0)}%</span>
-            {hoveredEntity.reliability_label && (
-              <span className={`badge ${hoveredEntity.reliability_label === 'reliable' ? 'badge-emerald' : 'badge-amber'}`}>
-                {hoveredEntity.reliability_label}
-              </span>
-            )}
-            <span style={styles.tooltipRegion}>📍 {hoveredEntity.spatial_pos}</span>
+            <span className="tooltip-conf">{Math.round((hoveredEntity.confidence || 0.9) * 100)}%</span>
+            <span className="tooltip-hint">Click or Pinch 👌 to Inspect</span>
           </div>
         )}
-      </div>
-
-      {/* Click instruction */}
-      <div style={styles.hint}>
-        💡 Click any detected object for Knowledge Lookup
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    minHeight: 0,
-    overflow: 'hidden',
-  },
-  titleBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '4px 8px 4px 0',
-  },
-  feedWrapper: {
-    position: 'relative',
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderRadius: 'var(--radius-md)',
-    margin: '0 var(--space-md)',
-    background: '#080b10',
-  },
-  canvas: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'contain',
-    cursor: 'crosshair',
-    borderRadius: 'var(--radius-md)',
-  },
-  placeholder: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '300px',
-  },
-  placeholderIcon: {
-    fontSize: '3rem',
-    color: 'var(--accent-cyan)',
-    opacity: 0.3,
-    animation: 'pulse-glow 2s ease-in-out infinite',
-  },
-  placeholderText: {
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    marginTop: '12px',
-  },
-  tooltip: {
-    position: 'absolute',
-    top: '12px',
-    left: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 14px',
-    background: 'rgba(10, 13, 20, 0.92)',
-    backdropFilter: 'blur(8px)',
-    border: '1px solid var(--accent-cyan)',
-    borderRadius: 'var(--radius-md)',
-    boxShadow: '0 0 16px rgba(0, 240, 255, 0.2)',
-    zIndex: 10,
-  },
-  tooltipName: {
-    fontFamily: 'var(--font-display)',
-    fontWeight: 600,
-    fontSize: '0.85rem',
-    color: 'var(--text-primary)',
-    textTransform: 'capitalize',
-  },
-  tooltipRegion: {
-    fontSize: '0.72rem',
-    color: 'var(--text-muted)',
-  },
-  hint: {
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-    textAlign: 'center',
-    padding: '6px 0 10px',
-    opacity: 0.6,
-  },
-};

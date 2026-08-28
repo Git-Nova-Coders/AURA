@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 
 /**
- * Chat Hub — Conversational interface with animated mic button and message history.
+ * Chat Hub — Conversational Multimodal AI interface with speech visualizer,
+ * prompt suggestions, and vector RAG citations.
  */
-export default function ChatHub({ onSendChat, chatResponse }) {
+export default function ChatHub({ onSendChat, chatResponse, isVoiceListening }) {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -29,17 +30,17 @@ export default function ChatHub({ onSendChat, chatResponse }) {
   // Auto-scroll on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isThinking]);
 
-  const handleSend = () => {
-    const query = inputText.trim();
+  const handleSend = (textToSend = null) => {
+    const query = (textToSend || inputText).trim();
     if (!query) return;
 
     setMessages((prev) => [
       ...prev,
       { role: 'user', text: query, timestamp: Date.now() },
     ]);
-    setInputText('');
+    if (!textToSend) setInputText('');
     setIsThinking(true);
 
     if (onSendChat) onSendChat(query);
@@ -66,32 +67,61 @@ export default function ChatHub({ onSendChat, chatResponse }) {
     return map[intent] || 'badge-cyan';
   };
 
+  const promptSuggestions = [
+    'What do you see in the scene?',
+    'Describe the locked target object',
+    'Read all text detected by OCR',
+    'Where is the laptop located?',
+  ];
+
   return (
-    <div className="glass-card" style={styles.container}>
-      <span className="panel-title"><span className="icon">💬</span> Voice & Chat Hub</span>
+    <div className="chat-hub-card glass-card">
+      <div className="chat-header">
+        <div className="chat-title-wrap">
+          <span className="chat-icon">💬</span>
+          <span className="panel-title">Multimodal Conversational AI</span>
+        </div>
+        {isVoiceListening && (
+          <div className="audio-visualizer">
+            <div className="audio-bar"></div>
+            <div className="audio-bar"></div>
+            <div className="audio-bar"></div>
+            <div className="audio-bar"></div>
+          </div>
+        )}
+      </div>
 
       {/* Messages */}
-      <div style={styles.messagesContainer}>
+      <div className="chat-messages">
         {messages.length === 0 && (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>🤖</span>
-            <p style={styles.emptyText}>Ask AURA about what it sees</p>
-            <p style={styles.emptyHint}>"What do you see?" · "Where is the laptop?" · "How to use the notebook?"</p>
+          <div className="chat-empty-state">
+            <span className="empty-icon animate-pulse">🤖</span>
+            <p className="empty-title">AURA Multimodal Intelligence</p>
+            <p className="empty-desc">Ask questions about scene objects, spatial layout, or user gestures.</p>
+            <div className="quick-prompts">
+              {promptSuggestions.map((prompt, idx) => (
+                <button
+                  key={idx}
+                  className="prompt-chip glass-card"
+                  onClick={() => handleSend(prompt)}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {messages.map((msg, i) => (
           <div
             key={i}
-            style={{
-              ...styles.messageBubble,
-              ...(msg.role === 'user' ? styles.userBubble : styles.assistantBubble),
-            }}
-            className="animate-fade-in"
+            className={`chat-bubble animate-fade-in ${
+              msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'
+            }`}
           >
-            <div style={styles.messageHeader}>
-              <span style={styles.messageRole}>
-                {msg.role === 'user' ? '🧑 You' : '◉ AURA'}
+            <div className="bubble-header">
+              <span className="bubble-role">
+                {msg.role === 'user' ? '🧑 You' : '⬢ AURA AI'}
               </span>
               {msg.intent && (
                 <span className={`badge ${intentBadgeColor(msg.intent)}`}>
@@ -99,24 +129,30 @@ export default function ChatHub({ onSendChat, chatResponse }) {
                 </span>
               )}
             </div>
-            <p style={styles.messageText}>{msg.text}</p>
+            <p className="bubble-text">{msg.text}</p>
             {msg.sources?.length > 0 && (
-              <div style={styles.sources}>
-                {msg.sources.map((s, j) => (
-                  <span key={j} style={styles.sourceChip}>{s}</span>
+              <div className="bubble-sources">
+                <span className="sources-label">Sources:</span>
+                {msg.sources.map((s, si) => (
+                  <span key={si} className="badge badge-cyan">
+                    📄 {s}
+                  </span>
                 ))}
               </div>
             )}
           </div>
         ))}
 
-        {/* Thinking indicator */}
         {isThinking && (
-          <div style={{ ...styles.messageBubble, ...styles.assistantBubble }} className="animate-fade-in">
-            <div style={styles.thinking}>
-              <span style={styles.thinkingDot} className="animate-pulse">●</span>
-              <span style={{ ...styles.thinkingDot, animationDelay: '0.2s' }} className="animate-pulse">●</span>
-              <span style={{ ...styles.thinkingDot, animationDelay: '0.4s' }} className="animate-pulse">●</span>
+          <div className="chat-bubble chat-bubble-assistant animate-pulse">
+            <div className="bubble-header">
+              <span className="bubble-role">⬢ AURA AI</span>
+              <span className="badge badge-cyan">Reasoning</span>
+            </div>
+            <div className="thinking-dots">
+              <span>●</span>
+              <span>●</span>
+              <span>●</span>
             </div>
           </div>
         )}
@@ -124,143 +160,26 @@ export default function ChatHub({ onSendChat, chatResponse }) {
       </div>
 
       {/* Input bar */}
-      <div style={styles.inputBar}>
+      <div className="chat-input-bar">
         <input
           type="text"
           className="input-field"
-          placeholder="Ask AURA anything..."
+          placeholder="Ask AURA anything about what it sees..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
-          style={styles.inputField}
-          id="chat-input"
+          id="chat-input-field"
         />
         <button
-          className="btn btn-primary"
-          onClick={handleSend}
-          disabled={!inputText.trim() || isThinking}
-          style={styles.sendBtn}
+          className="btn-send"
+          onClick={() => handleSend()}
+          disabled={!inputText.trim()}
           id="chat-send-btn"
         >
-          ➤
+          <span>Send</span>
+          <span className="send-arrow">➔</span>
         </button>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    minHeight: '300px',
-    overflow: 'hidden',
-    padding: 0,
-  },
-  messagesContainer: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: 'var(--space-sm) var(--space-md)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 'var(--space-sm)',
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    textAlign: 'center',
-    opacity: 0.5,
-    padding: 'var(--space-xl)',
-  },
-  emptyIcon: {
-    fontSize: '2.5rem',
-    marginBottom: '8px',
-  },
-  emptyText: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
-    fontWeight: 500,
-  },
-  emptyHint: {
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-    marginTop: '8px',
-    lineHeight: 1.5,
-  },
-  messageBubble: {
-    padding: '10px 14px',
-    borderRadius: 'var(--radius-md)',
-    maxWidth: '90%',
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    background: 'linear-gradient(135deg, rgba(138,43,226,0.2), rgba(138,43,226,0.1))',
-    border: '1px solid rgba(138,43,226,0.25)',
-  },
-  assistantBubble: {
-    alignSelf: 'flex-start',
-    background: 'linear-gradient(135deg, rgba(0,229,153,0.1), rgba(0,240,255,0.05))',
-    border: '1px solid rgba(0,229,153,0.2)',
-  },
-  messageHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    marginBottom: '4px',
-  },
-  messageRole: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '0.72rem',
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-  },
-  messageText: {
-    fontSize: '0.82rem',
-    lineHeight: 1.55,
-    color: 'var(--text-primary)',
-  },
-  sources: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    marginTop: '6px',
-  },
-  sourceChip: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.6rem',
-    padding: '1px 6px',
-    borderRadius: 'var(--radius-full)',
-    background: 'rgba(0,240,255,0.08)',
-    color: 'var(--text-muted)',
-    border: '1px solid rgba(0,240,255,0.1)',
-  },
-  thinking: {
-    display: 'flex',
-    gap: '6px',
-    padding: '4px 0',
-  },
-  thinkingDot: {
-    color: 'var(--accent-emerald)',
-    fontSize: '0.8rem',
-  },
-  inputBar: {
-    display: 'flex',
-    gap: 'var(--space-sm)',
-    padding: 'var(--space-sm) var(--space-md) var(--space-md)',
-    borderTop: '1px solid rgba(255,255,255,0.04)',
-  },
-  inputField: {
-    flex: 1,
-    fontSize: '0.82rem',
-  },
-  sendBtn: {
-    padding: '10px 16px',
-    fontSize: '1rem',
-    minWidth: '44px',
-  },
-};
