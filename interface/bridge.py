@@ -234,8 +234,12 @@ class AuraBridge:
         # OCR cache
         self._last_ocr_texts: List[TextDetection] = []
 
-        # Gesture Controller
-        self.gesture_controller = GestureActionController()
+        # Gesture Controller with real action callbacks
+        self.gesture_controller = GestureActionController(
+            on_inspect_callback=self.inspect_target,
+            on_toggle_sahi_callback=self.toggle_sahi,
+            on_voice_trigger_callback=self.toggle_voice,
+        )
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
 
