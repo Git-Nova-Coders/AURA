@@ -197,10 +197,12 @@ class IntentClassifier:
                 track_id=track_id,
             )
 
-        # 10. Object Info intent
+        # 10. Object Info / Inspection intent
         info_phrases = [
-            "what is this", "what is that", "tell me about", "what's that",
-            "explain the", "information about", "info on", "details about", "what kind of"
+            "inspect", "inspect this", "inspect the", "what is this", "what is that",
+            "tell me about", "what's that", "explain the", "explain this", "explain",
+            "information about", "info on", "details about", "what kind of",
+            "breakdown of", "profile of", "describe the", "describe this"
         ]
         if any(ip in q for ip in info_phrases) or (target_object is not None and len(q.split()) <= 4):
             return ParsedQuery(

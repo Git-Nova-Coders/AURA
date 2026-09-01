@@ -216,7 +216,7 @@ export default function NeuralTerminal({
               <span className="dossier-icon">👌</span>
               <div>
                 <h3 className="dossier-title">
-                  {(selectedEntity?.class_name || inspectResponse?.target || 'TARGET_ENTITY').toUpperCase()}
+                  {(inspectResponse?.target || selectedEntity?.class_name || 'TARGET_ENTITY').toUpperCase()}
                 </h3>
                 <span className="dossier-sub">TACTICAL INTELLIGENCE PROFILE</span>
               </div>
@@ -226,7 +226,11 @@ export default function NeuralTerminal({
               <div className="dossier-card">
                 <span className="card-lbl">CONFIDENCE</span>
                 <span className="card-val val-cyan">
-                  {selectedEntity?.confidence ? Math.round(selectedEntity.confidence * 100) : 98}%
+                  {inspectResponse?.response?.confidence
+                    ? Math.round(inspectResponse.response.confidence * 100)
+                    : selectedEntity?.confidence
+                    ? Math.round(selectedEntity.confidence * 100)
+                    : 98}%
                 </span>
               </div>
               <div className="dossier-card">
@@ -235,15 +239,17 @@ export default function NeuralTerminal({
               </div>
               <div className="dossier-card">
                 <span className="card-lbl">SPATIAL LOC</span>
-                <span className="card-val">{selectedEntity?.spatial_pos || 'CENTER'}</span>
+                <span className="card-val">
+                  {inspectResponse?.response?.spatial_pos || selectedEntity?.spatial_pos || 'CENTER'}
+                </span>
               </div>
             </div>
 
-            {selectedEntity?.ocr_texts?.length > 0 && (
+            {(inspectResponse?.response?.ocr_texts?.length > 0 || selectedEntity?.ocr_texts?.length > 0) && (
               <div className="dossier-block">
                 <span className="block-title">EXTRACTED OCR TEXT</span>
                 <div className="dossier-tags">
-                  {selectedEntity.ocr_texts.map((txt, idx) => (
+                  {(inspectResponse?.response?.ocr_texts || selectedEntity?.ocr_texts || []).map((txt, idx) => (
                     <span key={idx} className="badge badge-cyan">"{txt}"</span>
                   ))}
                 </div>
