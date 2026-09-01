@@ -683,17 +683,31 @@ class GestureActionController:
                 self.trigger_toast("❌ TARGET DESELECTED")
 
             elif self.confirmed_gesture == GestureType.PINCH:
-                if self.targeted_object is not None:
+                target_to_inspect = self.targeted_object
+                # If no object locked yet, find closest detection to pinch point or first detected entity
+                if target_to_inspect is None and all_detections:
+                    if active_res.landmarks:
+                        px = active_res.landmarks[INDEX_TIP].x * frame.shape[1]
+                        py = active_res.landmarks[INDEX_TIP].y * frame.shape[0]
+                        target_to_inspect = min(
+                            all_detections,
+                            key=lambda c: math.sqrt(((c.bbox[0] + c.bbox[2]) / 2.0 - px)**2 + ((c.bbox[1] + c.bbox[3]) / 2.0 - py)**2)
+                        )
+                    else:
+                        target_to_inspect = all_detections[0]
+
+                if target_to_inspect is not None:
+                    self.targeted_object = target_to_inspect
                     self.current_mode = GestureMode.INSPECT_OBJECT
-                    self.trigger_toast(f"👌 INSPECTING: {self.targeted_object.class_name.upper()}")
+                    self.trigger_toast(f"👌 INSPECTING: {target_to_inspect.class_name.upper()}", duration=2.5)
                     if self.on_inspect and (now - self.last_action_time) > 1.2:
                         self.last_action_time = now
                         try:
-                            self.on_inspect(self.targeted_object)
+                            self.on_inspect(target_to_inspect)
                         except Exception as e:
                             logger.error(f"Inspect callback error: {e}")
                 else:
-                    self.trigger_toast("👌 PINCH (POINT AT AN OBJECT TO SELECT)")
+                    self.trigger_toast("👌 PINCH (NO OBJECTS IN SCENE TO INSPECT)")
 
             elif self.confirmed_gesture == GestureType.ROCK_ON:
                 if (now - self.last_action_time) > 1.2:
