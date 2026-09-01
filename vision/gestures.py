@@ -65,9 +65,9 @@ class GestureType(str, Enum):
     OPEN_PALM = "open_palm"          # 🖐️ All 5 fingers extended -> Hide all boxes (Clean View)
     POINTING = "pointing"            # 👉 Index extended -> Cast laser ray & lock target
     PINCH = "pinch"                  # 👌 Thumb + Index touching -> Select / Inspect target
-    PEACE_SIGN = "peace_sign"        # ✌️ Index + Middle extended -> Reset view & show all boxes
-    THUMBS_UP = "thumbs_up"          # 👍 Thumb up, 4 fingers curled -> Snapshot / Confirm
-    THUMBS_DOWN = "thumbs_down"      # 👎 Thumb down, 4 fingers curled -> Deselect / Cancel
+    PEACE_SIGN = "peace_sign"        # ✌️ Victory sign (Index + Middle) -> Capture Screenshot / Snapshot
+    THUMBS_UP = "thumbs_up"          # 👍 Thumb up -> Restore all boxes / Confirm view
+    THUMBS_DOWN = "thumbs_down"      # 👎 Thumb down -> Deselect / Cancel target lock
     FIST = "fist"                    # ✊ All fingers curled -> Freeze overlay
     ROCK_ON = "rock_on"              # 🤘 Index + Pinky extended -> Toggle SAHI High-Res
     CALL_ME = "call_me"              # 🤙 Thumb + Pinky extended -> Trigger Voice Assistant
@@ -261,15 +261,24 @@ class HandGestureRecognizer:
 
         # Distance from fingertip to wrist vs knuckle (MCP) to wrist
         wrist = landmarks[WRIST]
-        index_ext = landmarks[INDEX_TIP].y < landmarks[INDEX_PIP].y and index_angle > 140.0
-        middle_ext = landmarks[MIDDLE_TIP].y < landmarks[MIDDLE_PIP].y and middle_angle > 140.0
-        ring_ext = landmarks[RING_TIP].y < landmarks[RING_PIP].y and ring_angle > 140.0
-        pinky_ext = landmarks[PINKY_TIP].y < landmarks[PINKY_PIP].y and pinky_angle > 140.0
+        index_tip_dist = compute_euclidean_dist(landmarks[INDEX_TIP], wrist)
+        index_pip_dist = compute_euclidean_dist(landmarks[INDEX_PIP], wrist)
+        middle_tip_dist = compute_euclidean_dist(landmarks[MIDDLE_TIP], wrist)
+        middle_pip_dist = compute_euclidean_dist(landmarks[MIDDLE_PIP], wrist)
+        ring_tip_dist = compute_euclidean_dist(landmarks[RING_TIP], wrist)
+        ring_pip_dist = compute_euclidean_dist(landmarks[RING_PIP], wrist)
+        pinky_tip_dist = compute_euclidean_dist(landmarks[PINKY_TIP], wrist)
+        pinky_pip_dist = compute_euclidean_dist(landmarks[PINKY_PIP], wrist)
+
+        index_ext = (index_tip_dist > index_pip_dist * 1.06 or landmarks[INDEX_TIP].y < landmarks[INDEX_PIP].y) and index_angle > 130.0
+        middle_ext = (middle_tip_dist > middle_pip_dist * 1.06 or landmarks[MIDDLE_TIP].y < landmarks[MIDDLE_PIP].y) and middle_angle > 130.0
+        ring_ext = (ring_tip_dist > ring_pip_dist * 1.06 or landmarks[RING_TIP].y < landmarks[RING_PIP].y) and ring_angle > 130.0
+        pinky_ext = (pinky_tip_dist > pinky_pip_dist * 1.06 or landmarks[PINKY_TIP].y < landmarks[PINKY_PIP].y) and pinky_angle > 130.0
 
         # Thumb extension (angle at IP joint + distance to index MCP)
         thumb_angle = compute_3d_angle(landmarks[THUMB_MCP], landmarks[THUMB_IP], landmarks[THUMB_TIP])
         thumb_tip_dist = compute_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_MCP])
-        thumb_ext = thumb_tip_dist > 0.13 and thumb_angle > 145.0
+        thumb_ext = thumb_tip_dist > 0.13 and thumb_angle > 140.0
 
         # Pinch detection (Thumb tip to Index tip distance when index is active)
         pinch_dist = compute_euclidean_dist(landmarks[THUMB_TIP], landmarks[INDEX_TIP])
@@ -314,26 +323,24 @@ class HandGestureRecognizer:
         elif is_pinching:
             gesture = GestureType.PINCH
             conf = 0.95
-        elif extended_count == 5:
+        elif extended_count == 5 or (index_ext and middle_ext and ring_ext and pinky_ext and thumb_ext):
             gesture = GestureType.OPEN_PALM
             conf = 0.95
-        elif index_ext and not middle_ext and not ring_ext and not pinky_ext:
-            gesture = GestureType.POINTING
-            conf = 0.92
         elif index_ext and middle_ext and not ring_ext and not pinky_ext:
             gesture = GestureType.PEACE_SIGN
-            conf = 0.93
+            conf = 0.95
         elif index_ext and pinky_ext and not middle_ext and not ring_ext:
             gesture = GestureType.ROCK_ON
             conf = 0.92
         elif thumb_ext and pinky_ext and not index_ext and not middle_ext and not ring_ext:
             gesture = GestureType.CALL_ME
             conf = 0.92
-        elif extended_count == 0 or (not index_ext and not middle_ext and not ring_ext and not pinky_ext and not thumb_ext):
-            gesture = GestureType.FIST
-            conf = 0.90
+        elif index_ext and not middle_ext and not ring_ext and not pinky_ext:
+            # Strictly POINTING whenever index is extended and other 3 fingers are curled
+            gesture = GestureType.POINTING
+            conf = 0.94
         elif thumb_ext and not index_ext and not middle_ext and not ring_ext and not pinky_ext:
-            # Check thumb direction (+Y vs -Y)
+            # Strictly Thumb only
             if landmarks[THUMB_TIP].y < landmarks[WRIST].y:
                 gesture = GestureType.THUMBS_UP
             else:
@@ -485,9 +492,17 @@ def draw_hand_skeleton(
         elif gesture_result.gesture == GestureType.OPEN_PALM:
             label_str = "🖐️ OPEN PALM (CLEAR)"
         elif gesture_result.gesture == GestureType.PEACE_SIGN:
-            label_str = "✌️ PEACE (ALL OBJECTS)"
+            label_str = "✌️ VICTORY (SNAPSHOT)"
+        elif gesture_result.gesture == GestureType.THUMBS_UP:
+            label_str = "👍 THUMBS UP (RESTORE ALL)"
+        elif gesture_result.gesture == GestureType.THUMBS_DOWN:
+            label_str = "👎 THUMBS DOWN (DESELECT)"
         elif gesture_result.gesture == GestureType.FIST:
             label_str = "✊ FIST (FREEZE)"
+        elif gesture_result.gesture == GestureType.ROCK_ON:
+            label_str = "🤘 ROCK ON (SAHI)"
+        elif gesture_result.gesture == GestureType.CALL_ME:
+            label_str = "🤙 CALL ME (VOICE)"
 
         # Semi-transparent pill background
         pill_w = len(label_str) * 10 + 20
@@ -645,12 +660,7 @@ class GestureActionController:
                 self.trigger_toast("🖐️ CLEAN VIEW (ALL BOXES HIDDEN)")
 
             elif self.confirmed_gesture == GestureType.PEACE_SIGN:
-                self.current_mode = GestureMode.ALL_OBJECTS
-                self.targeted_object = None
-                self.trigger_toast("✌️ ALL OBJECTS RESTORED")
-
-            elif self.confirmed_gesture == GestureType.THUMBS_UP:
-                # Snapshots have a 1.2s cooldown to prevent duplicate captures per hold
+                # Victory Sign captures high-res snapshot with 1.2s cooldown
                 if (now - self.last_action_time) > 1.2:
                     self.last_action_time = now
                     os.makedirs("captures", exist_ok=True)
@@ -660,6 +670,12 @@ class GestureActionController:
                         self.trigger_toast(f"📸 SNAPSHOT SAVED: {filename}", duration=2.5)
                     except Exception as e:
                         self.trigger_toast(f"📸 SNAPSHOT ERROR: {e}")
+
+            elif self.confirmed_gesture == GestureType.THUMBS_UP:
+                # Thumbs Up restores all bounding boxes and resets target selection
+                self.current_mode = GestureMode.ALL_OBJECTS
+                self.targeted_object = None
+                self.trigger_toast("👍 ALL BOUNDING BOXES RESTORED")
 
             elif self.confirmed_gesture == GestureType.THUMBS_DOWN:
                 self.targeted_object = None
