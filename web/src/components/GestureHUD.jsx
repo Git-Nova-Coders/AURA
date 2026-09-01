@@ -23,10 +23,10 @@ export default function GestureHUD({ telemetry, onOpenGuide }) {
 
   const gestureLabels = {
     open_palm: 'OPEN PALM (Clean View)',
-    peace_sign: 'PEACE SIGN (Reset View)',
+    peace_sign: 'VICTORY (Snapshot Saved)',
     pointing: 'POINTING (Target Raycast)',
     pinch: 'PINCH (Inspect Target)',
-    thumbs_up: 'THUMBS UP (Snapshot Saved)',
+    thumbs_up: 'THUMBS UP (All Boxes Restored)',
     thumbs_down: 'THUMBS DOWN (Deselect)',
     fist: 'FIST (Freeze Overlay)',
     rock_on: 'ROCK ON (SAHI High-Res)',

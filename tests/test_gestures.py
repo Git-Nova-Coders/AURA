@@ -156,7 +156,7 @@ class Test21LandmarkGestures(unittest.TestCase):
         self.assertEqual(target.class_name, "laptop")
 
     def test_gesture_action_controller_transitions(self):
-        """Controller state transitions from Open Palm to Peace Sign to Pointing."""
+        """Controller state transitions from Open Palm to Thumbs Up to Peace Sign (Snapshot)."""
         img = np.zeros((480, 640, 3), dtype=np.uint8)
         laptop = Detection(class_id=1, class_name="laptop", confidence=0.9, bbox=[100.0, 50.0, 250.0, 180.0])
         
@@ -167,12 +167,19 @@ class Test21LandmarkGestures(unittest.TestCase):
         self.assertEqual(mode, GestureMode.HIDE_BOXES)
         self.assertEqual(len(vis), 0)
 
-        # 2. Peace Sign -> ALL_OBJECTS
-        peace_res = GestureResult(gesture=GestureType.PEACE_SIGN, confidence=0.95)
-        self.controller.recognizer.analyze_frame = lambda f: [peace_res]
+        # 2. Thumbs Up -> ALL_OBJECTS (Restore all boxes)
+        thumbs_up_res = GestureResult(gesture=GestureType.THUMBS_UP, confidence=0.95)
+        self.controller.recognizer.analyze_frame = lambda f: [thumbs_up_res]
         vis, mode, _, _ = self.controller.update(img, [laptop])
         self.assertEqual(mode, GestureMode.ALL_OBJECTS)
         self.assertEqual(len(vis), 1)
+
+        # 3. Peace Sign -> Snapshot capture
+        peace_res = GestureResult(gesture=GestureType.PEACE_SIGN, confidence=0.95)
+        self.controller.recognizer.analyze_frame = lambda f: [peace_res]
+        vis, mode, _, _ = self.controller.update(img, [laptop])
+        self.assertIsNotNone(self.controller.active_toast)
+        self.assertTrue("SNAPSHOT" in self.controller.active_toast)
 
     def test_draw_hand_skeleton(self):
         """Skeleton overlay draws smoothly on image."""
