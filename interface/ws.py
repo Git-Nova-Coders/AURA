@@ -8,7 +8,7 @@ import json
 import time
 import asyncio
 import logging
-from typing import Set
+from typing import Set, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -17,14 +17,30 @@ logger = logging.getLogger("AURA.WS")
 # Global bridge reference — injected at startup
 _bridge = None
 
-# Connected clients
+# Connected clients & event loop
 _clients: Set[WebSocket] = set()
+_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def broadcast_sync(msg_dict: dict) -> None:
+    """Thread-safe event broadcast to all connected web clients."""
+    if not _clients:
+        return
+    msg_json = json.dumps(msg_dict)
+    for ws in list(_clients):
+        try:
+            if _loop and _loop.is_running():
+                asyncio.run_coroutine_threadsafe(ws.send_text(msg_json), _loop)
+        except Exception:
+            pass
 
 
 def set_bridge(bridge) -> None:
     """Sets the global bridge reference for WebSocket handlers."""
     global _bridge
     _bridge = bridge
+    if bridge and hasattr(bridge, "set_event_broadcaster"):
+        bridge.set_event_broadcaster(broadcast_sync)
 
 
 async def websocket_endpoint(websocket: WebSocket) -> None:
@@ -33,6 +49,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     Sends: video frames (base64 JPEG), telemetry, scene updates.
     Receives: chat queries, config toggles.
     """
+    global _loop
+    _loop = asyncio.get_running_loop()
+
     await websocket.accept()
     _clients.add(websocket)
     client_id = id(websocket)

@@ -234,6 +234,9 @@ class AuraBridge:
         # OCR cache
         self._last_ocr_texts: List[TextDetection] = []
 
+        # Event broadcaster for pushing async events (e.g. gesture pinch inspect) to WebSockets
+        self._event_broadcaster = None
+
         # Gesture Controller with real action callbacks
         self.gesture_controller = GestureActionController(
             on_inspect_callback=self.inspect_target,
@@ -763,22 +766,51 @@ class AuraBridge:
         self.gesture_controller.trigger_toast(f"🤙 VOICE ASSISTANT {state_str}", duration=1.8)
         return self._voice_listening
 
-    def inspect_target(self, query_override: Optional[str] = None) -> Dict[str, Any]:
+    def set_event_broadcaster(self, broadcaster: Any) -> None:
+        """Sets callback function to broadcast real-time events to connected WebSocket clients."""
+        self._event_broadcaster = broadcaster
+
+    def inspect_target(self, query_override: Optional[Any] = None) -> Dict[str, Any]:
         """Inspects the currently locked or targeted object with Multimodal AI reasoning."""
         with self._lock:
             target_name = self._telemetry.pointed_target if self._telemetry else None
             scene = self._latest_scene
 
-        target_str = query_override or target_name or "object"
-        prompt = f"Inspect and explain this {target_str} in detail, including its function, context in the scene, and related knowledge."
+        # Handle Detection object or string passed from GestureActionController or WebSocket
+        target_str = "object"
+        if hasattr(query_override, 'class_name'):
+            target_str = str(query_override.class_name)
+        elif isinstance(query_override, str) and query_override.strip():
+            target_str = query_override.strip()
+        elif target_name:
+            target_str = target_name
+
+        prompt = f"Provide a detailed tactical and functional intelligence breakdown of this {target_str} in the scene, its purpose, context, and key operational details."
         
         response = self.send_chat(prompt)
-        self.gesture_controller.trigger_toast(f"👌 INSPECTED: {target_str.upper()}", duration=2.0)
-        return {
+        self.gesture_controller.trigger_toast(f"👌 INSPECTED: {target_str.upper()}", duration=2.5)
+
+        result = {
             "target": target_str,
             "response": response,
             "timestamp": time.time(),
         }
+
+        # Broadcast inspect and chat response to all connected WebSockets immediately!
+        if self._event_broadcaster:
+            try:
+                self._event_broadcaster({
+                    "type": "inspect_response",
+                    "data": result,
+                })
+                self._event_broadcaster({
+                    "type": "chat_response",
+                    "data": response,
+                })
+            except Exception as e:
+                logger.warning(f"Failed to broadcast inspect response: {e}")
+
+        return result
 
     def get_status(self) -> Dict[str, Any]:
         """Returns overall system status."""

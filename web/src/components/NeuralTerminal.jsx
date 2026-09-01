@@ -22,10 +22,24 @@ export default function NeuralTerminal({
   const [isThinking, setIsThinking] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Auto-switch to dossier when inspect response arrives
+  // Auto-switch to dossier and add to chat stream when inspect response arrives
   useEffect(() => {
     if (inspectResponse) {
       setActiveTab('dossier');
+      soundFX.playBeep(880, 0.08, 'triangle', 0.08);
+      const targetName = (inspectResponse.target || 'PINCHED_OBJECT').toUpperCase();
+      const explanation = inspectResponse.response?.response_text || 'Tactical analysis completed.';
+      
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: `👌 [TACTICAL DOSSIER: ${targetName}]\n${explanation}`,
+          intent: 'INSPECTION',
+          sources: inspectResponse.response?.sources || [],
+          timestamp: Date.now(),
+        },
+      ]);
     }
   }, [inspectResponse]);
 
