@@ -59,6 +59,11 @@ class ObjectEntity:
         """Concatenates all recognized text on this object."""
         return " ".join(t.text for t in self.texts) if self.texts else ""
 
+    @property
+    def ocr_texts(self) -> List[str]:
+        """Returns list of text strings recognized on this object."""
+        return [t.text for t in self.texts] if self.texts else []
+
     def to_dict(self) -> Dict[str, Any]:
         """Serializes ObjectEntity to dictionary."""
         return {

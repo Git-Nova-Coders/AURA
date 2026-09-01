@@ -776,23 +776,58 @@ class AuraBridge:
             target_name = self._telemetry.pointed_target if self._telemetry else None
             scene = self._latest_scene
 
-        # Handle Detection object or string passed from GestureActionController or WebSocket
+        # 1. Resolve target entity metadata
         target_str = "object"
+        confidence = 0.95
+        spatial_pos = "CENTER"
+        ocr_texts: List[str] = []
+
         if hasattr(query_override, 'class_name'):
             target_str = str(query_override.class_name)
+            confidence = getattr(query_override, 'confidence', 0.95)
+            ocr_texts = getattr(query_override, 'ocr_texts', [])
+            if hasattr(query_override, 'bbox') and query_override.bbox:
+                bx = (query_override.bbox[0] + query_override.bbox[2]) / 2.0
+                by = (query_override.bbox[1] + query_override.bbox[3]) / 2.0
+                spatial_pos = f"{'LEFT' if bx < 240 else 'RIGHT' if bx > 400 else 'CENTER'} {'TOP' if by < 180 else 'BOTTOM' if by > 300 else 'MID'}"
         elif isinstance(query_override, str) and query_override.strip():
             target_str = query_override.strip()
         elif target_name:
             target_str = target_name
 
-        prompt = f"Provide a detailed tactical and functional intelligence breakdown of this {target_str} in the scene, its purpose, context, and key operational details."
-        
-        response = self.send_chat(prompt)
+        # 2. Retrieve grounded encyclopedic knowledge
+        k_item = self.knowledge_retriever.retrieve(target_str)
+        k_title = k_item.title if k_item else target_str.capitalize()
+        k_category = k_item.category if k_item else "Visual Entity"
+        k_summary = k_item.summary if k_item else f"A standard {target_str} observed in the visual field."
+        k_source = k_item.source if k_item else "Curated Intelligence"
+
+        # 3. Query Conversation Engine
+        chat_query = f"What is this {target_str}?"
+        chat_resp = self.send_chat(chat_query)
+        response_text = chat_resp.get("response_text", "")
+
+        # Fallback to rich structured breakdown if response is too brief or contains generic fallback text
+        if not response_text or len(response_text) < 15 or "do not see" in response_text.lower() or "aura" in response_text.lower():
+            response_text = f"{k_title} ({k_category}): {k_summary}"
+            if ocr_texts:
+                response_text += f" Extracted OCR text: {', '.join([f'\"{t}\"' for t in ocr_texts])}."
+            response_text += f" (Spatial Region: {spatial_pos}, Confidence: {int(confidence * 100)}%)."
+
         self.gesture_controller.trigger_toast(f"👌 INSPECTED: {target_str.upper()}", duration=2.5)
 
         result = {
             "target": target_str,
-            "response": response,
+            "response": {
+                "query": f"Inspect {target_str}",
+                "intent": "object_info",
+                "response_text": response_text,
+                "confidence": confidence,
+                "spatial_pos": spatial_pos,
+                "ocr_texts": ocr_texts,
+                "sources": [k_source, "context_manager"],
+                "timestamp": time.time(),
+            },
             "timestamp": time.time(),
         }
 
@@ -805,7 +840,7 @@ class AuraBridge:
                 })
                 self._event_broadcaster({
                     "type": "chat_response",
-                    "data": response,
+                    "data": result["response"],
                 })
             except Exception as e:
                 logger.warning(f"Failed to broadcast inspect response: {e}")

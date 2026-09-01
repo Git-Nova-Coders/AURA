@@ -145,10 +145,14 @@ class ConversationEngine:
         # If entity is in current scene
         if target_entity:
             k_item = self.knowledge_retriever.retrieve(target_entity.class_name)
+            ocr_text_str = ""
+            if target_entity.ocr_texts:
+                ocr_text_str = f" Extracted text: {', '.join([f'\"{t}\"' for t in target_entity.ocr_texts])}."
+
             if k_item:
                 text = (
-                    f"I see a {target_entity.describe()}. "
-                    f"According to {k_item.source}: {k_item.summary}"
+                    f"Identified {k_item.title} ({k_item.category}) in the {target_entity.spatial_region} of the scene "
+                    f"with {int(target_entity.confidence * 100)}% detection certainty. {k_item.summary}{ocr_text_str}"
                 )
                 return ConversationResponse(
                     query=parsed.raw_query,
@@ -159,7 +163,7 @@ class ConversationEngine:
                     sources=[k_item.source, "context_manager"],
                 )
             else:
-                text = f"I observe a {target_entity.describe()} in the camera view."
+                text = f"I observe a {target_entity.describe()} in the {target_entity.spatial_region} region of the frame.{ocr_text_str}"
                 return ConversationResponse(
                     query=parsed.raw_query,
                     intent=parsed.intent,
@@ -184,7 +188,7 @@ class ConversationEngine:
         return ConversationResponse(
             query=parsed.raw_query,
             intent=parsed.intent,
-            response_text=f"I do not see a {parsed.target_object or 'requested object'} in view, and have no matching encyclopedic entry.",
+            response_text=f"No matching encyclopedic profile found for '{parsed.target_object or 'requested object'}'.",
             sources=["knowledge_retriever"],
         )
 
@@ -392,9 +396,24 @@ class ConversationEngine:
         )
 
     def _handle_general_qa(self, parsed: ParsedQuery) -> ConversationResponse:
-        # 1. Check if query matches a document in RAG
+        # 1. Check if there is an entity mentioned in query or active scene
+        target_entity = self.context_manager.resolve_reference(parsed.raw_query)
+        knowledge = None
+        if target_entity:
+            knowledge = self.knowledge_retriever.retrieve(target_entity.class_name)
+            if knowledge:
+                return ConversationResponse(
+                    query=parsed.raw_query,
+                    intent=IntentType.OBJECT_INFO,
+                    response_text=f"Identified {knowledge.title} ({knowledge.category}): {knowledge.summary}",
+                    target_entity=target_entity,
+                    knowledge_item=knowledge,
+                    sources=[knowledge.source, "context_manager"],
+                )
+
+        # 2. Check if query matches a technical document in RAG with high confidence
         rag_res = self.rag_engine.query(parsed.raw_query)
-        if rag_res.has_results and rag_res.scores[0] >= 0.35:
+        if rag_res.has_results and rag_res.scores[0] >= 0.60:
             top_doc = rag_res.top_document
             return ConversationResponse(
                 query=parsed.raw_query,
@@ -403,12 +422,6 @@ class ConversationEngine:
                 rag_result=rag_res,
                 sources=["rag_vector_store"],
             )
-
-        # 2. Check if there is an entity mentioned
-        target_entity = self.context_manager.resolve_reference(parsed.raw_query)
-        knowledge = None
-        if target_entity:
-            knowledge = self.knowledge_retriever.retrieve(target_entity.class_name)
 
         scene = self.context_manager.latest_scene
         scene_info = scene.summary() if scene else "No visual feed active."
