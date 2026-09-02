@@ -583,6 +583,7 @@ class GestureActionController:
         on_inspect_callback: Optional[Any] = None,
         on_toggle_sahi_callback: Optional[Any] = None,
         on_voice_trigger_callback: Optional[Any] = None,
+        on_deselect_callback: Optional[Any] = None,
     ):
         self.debounce_frames = debounce_frames
         self.recognizer = HandGestureRecognizer()
@@ -591,6 +592,7 @@ class GestureActionController:
         self.on_inspect = on_inspect_callback
         self.on_toggle_sahi = on_toggle_sahi_callback
         self.on_voice_trigger = on_voice_trigger_callback
+        self.on_deselect = on_deselect_callback
 
         # State
         self.current_mode: GestureMode = GestureMode.ALL_OBJECTS
@@ -681,6 +683,12 @@ class GestureActionController:
                 self.targeted_object = None
                 self.current_mode = GestureMode.ALL_OBJECTS
                 self.trigger_toast("❌ TARGET DESELECTED")
+                if self.on_deselect and (now - self.last_action_time) > 0.8:
+                    self.last_action_time = now
+                    try:
+                        self.on_deselect()
+                    except Exception as e:
+                        logger.error(f"Deselect callback error: {e}")
 
             elif self.confirmed_gesture == GestureType.PINCH:
                 # 1. Combination Gesture: Check if target was locked with Pointing Ray
