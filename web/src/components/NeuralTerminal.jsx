@@ -4,7 +4,8 @@ import { soundFX } from '../utils/audioFx';
 
 /**
  * NeuralTerminal — Right Wing Multimodal AI Intelligence Terminal
- * with tabs for Conversational AI, Deep Object Dossier, and RAG Manual Vectors.
+ * Displays active object inspection dossiers (scrollable timeline),
+ * AI Conversational Reasoning, and RAG Technical Manuals.
  */
 export default function NeuralTerminal({
   onSendChat,
@@ -13,9 +14,12 @@ export default function NeuralTerminal({
   onSearchRAG,
   selectedEntity,
   inspectResponse,
+  inspectHistory = [],
+  onDeselectAll,
+  onRemoveInspectItem,
   isVoiceListening,
 }) {
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' | 'dossier' | 'rag'
+  const [activeTab, setActiveTab] = useState('dossier'); // 'dossier' | 'chat' | 'rag'
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [ragQuery, setRagQuery] = useState('');
@@ -94,8 +98,14 @@ export default function NeuralTerminal({
 
   return (
     <div className="neural-terminal-panel glass-panel">
-      {/* ── Terminal Tab Switcher ── */}
+      {/* ── Terminal Tab Switcher & Close Header ── */}
       <div className="terminal-tab-bar">
+        <button
+          className={`terminal-tab ${activeTab === 'dossier' ? 'tab-active' : ''}`}
+          onClick={() => { soundFX.playToggle(true); setActiveTab('dossier'); }}
+        >
+          👌 DOSSIERS ({inspectHistory.length || (selectedEntity || inspectResponse ? 1 : 0)})
+        </button>
         <button
           className={`terminal-tab ${activeTab === 'chat' ? 'tab-active' : ''}`}
           onClick={() => { soundFX.playToggle(true); setActiveTab('chat'); }}
@@ -103,24 +113,180 @@ export default function NeuralTerminal({
           💬 AI TERMINAL
         </button>
         <button
-          className={`terminal-tab ${activeTab === 'dossier' ? 'tab-active' : ''}`}
-          onClick={() => { soundFX.playToggle(true); setActiveTab('dossier'); }}
-        >
-          👌 TARGET DOSSIER
-        </button>
-        <button
           className={`terminal-tab ${activeTab === 'rag' ? 'tab-active' : ''}`}
           onClick={() => { soundFX.playToggle(true); setActiveTab('rag'); }}
         >
-          📚 RAG MANUALS
+          📚 RAG
+        </button>
+
+        {/* 1-Click Deselect All & Close Button */}
+        <button
+          className="btn-deselect-all"
+          onClick={() => {
+            soundFX.playClick();
+            if (onDeselectAll) onDeselectAll();
+          }}
+          title="Deselect all inspected objects and close panel"
+        >
+          ✕ DESELECT ALL
         </button>
       </div>
 
       {/* ── Tab Content ── */}
       <div className="terminal-body">
-        {/* 1. CHAT TAB */}
+        {/* 1. SCROLLABLE OBJECT DOSSIER TAB */}
+        {activeTab === 'dossier' && (
+          <div className="tab-pane-dossier animate-fade-in">
+            {/* Scrollable list of all inspected objects */}
+            <div className="dossier-scroll-list">
+              {inspectHistory.length > 0 ? (
+                inspectHistory.map((item, idx) => (
+                  <div key={item.id || idx} className="dossier-timeline-card glass-card animate-slide-in">
+                    <div className="dossier-card-hdr">
+                      <div className="dossier-card-title-group">
+                        <span className="dossier-item-icon">👌</span>
+                        <div>
+                          <h4 className="dossier-item-title">{(item.target || item.class_name || 'OBJECT').toUpperCase()}</h4>
+                          <span className="dossier-item-meta">
+                            {new Date(item.timestamp || Date.now()).toLocaleTimeString()} // {item.spatial_pos || 'ACTIVE FOCUS'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="dossier-card-actions">
+                        <span className="badge badge-cyan">{Math.round((item.confidence || 0.95) * 100)}% Match</span>
+                        {onRemoveInspectItem && (
+                          <button
+                            className="btn-dismiss-item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveInspectItem(idx);
+                            }}
+                            title="Remove from history"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="dossier-mini-grid">
+                      <div className="dossier-mini-stat">
+                        <span className="mini-lbl">STATUS</span>
+                        <span className="mini-val val-emerald">INSPECTED</span>
+                      </div>
+                      <div className="dossier-mini-stat">
+                        <span className="mini-lbl">BOUNDS</span>
+                        <span className="mini-val">
+                          {item.bbox ? `[${Math.round(item.bbox[0])}, ${Math.round(item.bbox[1])}]` : 'TRACKED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Extracted OCR text if present */}
+                    {item.ocr_texts?.length > 0 && (
+                      <div className="dossier-block-compact">
+                        <span className="block-title">EXTRACTED TEXT</span>
+                        <div className="dossier-tags">
+                          {item.ocr_texts.map((t, ti) => (
+                            <span key={ti} className="badge badge-cyan">"{t}"</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Intelligence explanation */}
+                    <div className="dossier-explanation-box">
+                      <p>{item.explanation || item.response_text || 'Tactical telemetry and spatial orientation recorded.'}</p>
+                    </div>
+
+                    <button
+                      className="btn-dossier-ask-compact"
+                      onClick={() => {
+                        handleSend(`Explain what this ${(item.target || item.class_name || 'object')} is and its context in the scene.`);
+                        setActiveTab('chat');
+                      }}
+                    >
+                      💬 Inquire AI About This
+                    </button>
+                  </div>
+                ))
+              ) : (
+                /* Fallback single inspected entity view */
+                <div className="dossier-timeline-card glass-card animate-slide-in">
+                  <div className="dossier-header">
+                    <span className="dossier-icon">👌</span>
+                    <div>
+                      <h3 className="dossier-title">
+                        {(inspectResponse?.target || selectedEntity?.class_name || 'PINCHED_OBJECT').toUpperCase()}
+                      </h3>
+                      <span className="dossier-sub">TACTICAL INTELLIGENCE PROFILE</span>
+                    </div>
+                  </div>
+
+                  <div className="dossier-stats-grid">
+                    <div className="dossier-card">
+                      <span className="card-lbl">CONFIDENCE</span>
+                      <span className="card-val val-cyan">
+                        {inspectResponse?.response?.confidence
+                          ? Math.round(inspectResponse.response.confidence * 100)
+                          : selectedEntity?.confidence
+                          ? Math.round(selectedEntity.confidence * 100)
+                          : 98}%
+                      </span>
+                    </div>
+                    <div className="dossier-card">
+                      <span className="card-lbl">VERIFICATION</span>
+                      <span className="card-val val-emerald">VERIFIED</span>
+                    </div>
+                    <div className="dossier-card">
+                      <span className="card-lbl">SPATIAL LOC</span>
+                      <span className="card-val">
+                        {inspectResponse?.response?.spatial_pos || selectedEntity?.spatial_pos || 'CENTER'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {(inspectResponse?.response?.ocr_texts?.length > 0 || selectedEntity?.ocr_texts?.length > 0) && (
+                    <div className="dossier-block">
+                      <span className="block-title">EXTRACTED OCR TEXT</span>
+                      <div className="dossier-tags">
+                        {(inspectResponse?.response?.ocr_texts || selectedEntity?.ocr_texts || []).map((txt, idx) => (
+                          <span key={idx} className="badge badge-cyan">"{txt}"</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="dossier-block">
+                    <span className="block-title">AI ANALYSIS & REASONING</span>
+                    <div className="dossier-explanation">
+                      <p>
+                        {inspectResponse?.response?.response_text ||
+                          'Pinch or click any entity in the scene to inspect and view real-time intelligence.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    className="btn-dossier-ask"
+                    onClick={() => {
+                      const target = selectedEntity?.class_name || inspectResponse?.target || 'object';
+                      handleSend(`Explain what this ${target} is and its context in the scene.`);
+                      setActiveTab('chat');
+                    }}
+                  >
+                    💬 Deep Conversational Inquiry
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 2. CHAT TAB */}
         {activeTab === 'chat' && (
-          <div className="tab-pane-chat">
+          <div className="tab-pane-chat animate-fade-in">
             {/* Audio Wave Header */}
             <div className="voice-status-header">
               <span className="voice-label">
@@ -206,76 +372,6 @@ export default function NeuralTerminal({
                 TRANSMIT ➔
               </button>
             </div>
-          </div>
-        )}
-
-        {/* 2. TARGET DOSSIER TAB */}
-        {activeTab === 'dossier' && (
-          <div className="tab-pane-dossier animate-fade-in">
-            <div className="dossier-header">
-              <span className="dossier-icon">👌</span>
-              <div>
-                <h3 className="dossier-title">
-                  {(inspectResponse?.target || selectedEntity?.class_name || 'TARGET_ENTITY').toUpperCase()}
-                </h3>
-                <span className="dossier-sub">TACTICAL INTELLIGENCE PROFILE</span>
-              </div>
-            </div>
-
-            <div className="dossier-stats-grid">
-              <div className="dossier-card">
-                <span className="card-lbl">CONFIDENCE</span>
-                <span className="card-val val-cyan">
-                  {inspectResponse?.response?.confidence
-                    ? Math.round(inspectResponse.response.confidence * 100)
-                    : selectedEntity?.confidence
-                    ? Math.round(selectedEntity.confidence * 100)
-                    : 98}%
-                </span>
-              </div>
-              <div className="dossier-card">
-                <span className="card-lbl">VERIFICATION</span>
-                <span className="card-val val-emerald">VERIFIED</span>
-              </div>
-              <div className="dossier-card">
-                <span className="card-lbl">SPATIAL LOC</span>
-                <span className="card-val">
-                  {inspectResponse?.response?.spatial_pos || selectedEntity?.spatial_pos || 'CENTER'}
-                </span>
-              </div>
-            </div>
-
-            {(inspectResponse?.response?.ocr_texts?.length > 0 || selectedEntity?.ocr_texts?.length > 0) && (
-              <div className="dossier-block">
-                <span className="block-title">EXTRACTED OCR TEXT</span>
-                <div className="dossier-tags">
-                  {(inspectResponse?.response?.ocr_texts || selectedEntity?.ocr_texts || []).map((txt, idx) => (
-                    <span key={idx} className="badge badge-cyan">"{txt}"</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="dossier-block">
-              <span className="block-title">AI ANALYSIS & REASONING</span>
-              <div className="dossier-explanation">
-                <p>
-                  {inspectResponse?.response?.response_text ||
-                    'Perform Pinch 👌 gesture or click any entity in the scene to load intelligence dossier.'}
-                </p>
-              </div>
-            </div>
-
-            <button
-              className="btn-dossier-ask"
-              onClick={() => {
-                const target = selectedEntity?.class_name || inspectResponse?.target || 'object';
-                handleSend(`Explain what this ${target} is and its context in the scene.`);
-                setActiveTab('chat');
-              }}
-            >
-              💬 Deep Conversational Inquiry
-            </button>
           </div>
         )}
 
