@@ -38,7 +38,33 @@ from vision.gestures import (
     draw_action_toast,
 )
 
+from enum import Enum
+
 logger = logging.getLogger("AURA.Bridge")
+
+
+class TargetFilterMode(str, Enum):
+    """Perception target category filter modes."""
+    ALL = "ALL"                    # Both (All targets: humans + objects)
+    OBJECTS_ONLY = "OBJECTS_ONLY"  # Inanimate/synthetic objects only (filter out person, face, hand, etc.)
+    HUMANS_ONLY = "HUMANS_ONLY"    # Biological humans, faces, and hand features only
+    OFF = "OFF"                    # Perception off (nothing detected, 0 boxes)
+
+
+def is_human_entity(class_name: str) -> bool:
+    """Returns True if the detection class corresponds to a human or human anatomical feature."""
+    if not class_name:
+        return False
+    cn = class_name.lower().replace("-", " ").replace("_", " ").strip()
+    human_keywords = [
+        "person", "human", "face", "head", "hand", "people",
+        "man", "woman", "boy", "girl", "child", "body", "pedestrian",
+        "individual", "guy", "lady", "arm", "leg", "foot", "palm",
+        "finger", "eye", "mouth", "nose", "hair", "fist", "thumbs up",
+        "pointing", "open palm", "face mask", "pose", "selfie"
+    ]
+    words = cn.split()
+    return any(kw in cn or kw in words for kw in human_keywords)
 
 
 @dataclass
@@ -53,6 +79,8 @@ class TelemetrySnapshot:
     sahi_enabled: bool = False
     tracking_enabled: bool = True
     ocr_enabled: bool = True
+    gestures_enabled: bool = False
+    target_filter_mode: str = "ALL"
     voice_listening: bool = False
     ann_version: Optional[str] = None
     voice_status: str = "OFF"
@@ -76,6 +104,8 @@ class TelemetrySnapshot:
             "sahi_enabled": self.sahi_enabled,
             "tracking_enabled": self.tracking_enabled,
             "ocr_enabled": self.ocr_enabled,
+            "gestures_enabled": self.gestures_enabled,
+            "target_filter_mode": self.target_filter_mode,
             "voice_listening": self.voice_listening,
             "ann_version": self.ann_version,
             "voice_status": self.voice_status,
@@ -119,6 +149,7 @@ class AuraBridge:
         enable_memory: bool = True,
         memory_db: str = "data/memory.db",
         llm_provider: str = "offline",
+        enable_gestures: bool = False,
     ):
         self.source = source
         self.width = width
@@ -222,6 +253,8 @@ class AuraBridge:
         # Tracking state
         self._tracking_enabled = True
         self._ocr_enabled = enable_ocr
+        self._gestures_enabled = enable_gestures
+        self._target_filter_mode = TargetFilterMode.ALL
         self._voice_listening = False
         self._enable_memory = enable_memory
         self._enable_rag = enable_rag
@@ -245,6 +278,18 @@ class AuraBridge:
         )
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
+
+    def _apply_target_filter(self, detections: List[Detection]) -> List[Detection]:
+        """Filters detections based on the active perception target category mode."""
+        if self._target_filter_mode == TargetFilterMode.OFF:
+            return []
+        if not detections:
+            return []
+        if self._target_filter_mode == TargetFilterMode.OBJECTS_ONLY:
+            return [d for d in detections if not is_human_entity(d.class_name)]
+        elif self._target_filter_mode == TargetFilterMode.HUMANS_ONLY:
+            return [d for d in detections if is_human_entity(d.class_name)]
+        return detections
 
     def _init_camera(self) -> None:
         """Initializes camera or synthetic frame source."""
@@ -387,7 +432,7 @@ class AuraBridge:
         ocr_lock = threading.Lock()
         def async_ocr_worker():
             while self._running:
-                if self.ocr_engine is not None:
+                if self.ocr_engine is not None and self._ocr_enabled:
                     work_frame = None
                     with frame_lock:
                         if latest_camera_frame is not None:
@@ -396,9 +441,12 @@ class AuraBridge:
                         try:
                             texts = self.ocr_engine.extract_text(work_frame)
                             with ocr_lock:
-                                self._last_ocr_texts = texts
+                                self._last_ocr_texts = texts if self._ocr_enabled else []
                         except Exception as e:
                             logger.debug(f"Async OCR extract error: {e}")
+                else:
+                    with ocr_lock:
+                        self._last_ocr_texts = []
                 # Scan OCR in background at 1.5s interval without blocking video stream
                 time.sleep(1.5)
 
@@ -414,8 +462,12 @@ class AuraBridge:
 
             # 1. Capture frame & detect
             if self._use_synthetic:
-                frame, detections, synth_texts = self._create_synthetic_frame(frame_count)
-                self._last_ocr_texts = synth_texts
+                frame, raw_detections, synth_texts = self._create_synthetic_frame(frame_count)
+                if self._ocr_enabled:
+                    self._last_ocr_texts = synth_texts
+                else:
+                    self._last_ocr_texts = []
+                detections = self._apply_target_filter(raw_detections)
                 infer_latency_ms = 15.0
             else:
                 try:
@@ -426,14 +478,18 @@ class AuraBridge:
 
                 if frame is None:
                     # Seamless animation fallback when camera is off or unavailable
-                    frame, detections, synth_texts = self._create_synthetic_frame(frame_count)
-                    self._last_ocr_texts = synth_texts
+                    frame, raw_detections, synth_texts = self._create_synthetic_frame(frame_count)
+                    if self._ocr_enabled:
+                        self._last_ocr_texts = synth_texts
+                    else:
+                        self._last_ocr_texts = []
+                    detections = self._apply_target_filter(raw_detections)
                     infer_latency_ms = 15.0
                 else:
                     with frame_lock:
                         latest_camera_frame = frame
                     with det_lock:
-                        detections = list(current_camera_dets)
+                        detections = self._apply_target_filter(list(current_camera_dets))
                     infer_latency_ms = last_infer_latency
 
             # 3. Track
@@ -457,11 +513,11 @@ class AuraBridge:
 
             # 5. Non-blocking OCR state sync
             with ocr_lock:
-                current_ocr_texts = list(self._last_ocr_texts)
+                current_ocr_texts = list(self._last_ocr_texts) if self._ocr_enabled else []
 
             # 6. Context update
             object_texts_map: Dict[int, List[TextDetection]] = {}
-            if current_ocr_texts and detections:
+            if self._ocr_enabled and current_ocr_texts and detections:
                 for idx, det in enumerate(detections):
                     key = det.track_id if det.track_id is not None else idx
                     dx1, dy1, dx2, dy2 = det.bbox
@@ -475,8 +531,8 @@ class AuraBridge:
 
             scene_context = self.context_manager.update(
                 detections=detections,
-                text_detections=current_ocr_texts,
-                object_texts=object_texts_map,
+                text_detections=current_ocr_texts if self._ocr_enabled else [],
+                object_texts=object_texts_map if self._ocr_enabled else {},
                 frame_shape=frame.shape,
             )
 
@@ -484,14 +540,20 @@ class AuraBridge:
             if self._enable_memory and self.episodic_memory:
                 self.episodic_memory.record_scene(scene_context)
 
-            # 8. Hand Gesture Interactive Control
+            # 8. Hand Gesture Interactive Control (Only active when armed/enabled)
             raw_img = frame.image if isinstance(frame, Frame) else frame
-            (
-                visible_detections,
-                gesture_mode,
-                active_gesture,
-                pointed_target,
-            ) = self.gesture_controller.update(raw_img, detections)
+            if self._gestures_enabled:
+                (
+                    visible_detections,
+                    gesture_mode,
+                    active_gesture,
+                    pointed_target,
+                ) = self.gesture_controller.update(raw_img, detections)
+            else:
+                visible_detections = detections
+                gesture_mode = GestureMode.ALL_OBJECTS
+                active_gesture = GestureResult()
+                pointed_target = None
 
             # 9. Annotate frame based on active gesture mode
             if gesture_mode == GestureMode.HIDE_BOXES:
@@ -508,12 +570,13 @@ class AuraBridge:
                 )
             else:
                 annotated = self.detector.annotate(raw_img, visible_detections)
-                if self._last_ocr_texts:
+                if self._ocr_enabled and self._last_ocr_texts:
                     annotated = draw_text_annotations(annotated, self._last_ocr_texts)
 
                 # Pointing Laser & Target Visual Indicator
                 if (
-                    gesture_mode in (GestureMode.FOCUS_OBJECT, GestureMode.INSPECT_OBJECT)
+                    self._gestures_enabled
+                    and gesture_mode in (GestureMode.FOCUS_OBJECT, GestureMode.INSPECT_OBJECT)
                     and pointed_target is not None
                     and active_gesture.pointing_tip is not None
                 ):
@@ -540,12 +603,20 @@ class AuraBridge:
                         2,
                     )
 
-            # Draw Cybernetic 21-Landmark Hand Skeleton
-            if active_gesture.landmarks:
+            # Draw Cybernetic 21-Landmark Hand Skeleton (only if gestures armed and not in objects-only mode)
+            if (
+                self._gestures_enabled
+                and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY
+                and active_gesture.landmarks
+            ):
                 annotated = draw_hand_skeleton(annotated, active_gesture)
 
-            # Draw Real-Time HUD Action Toast Banner
-            if self.gesture_controller.active_toast and time.time() < self.gesture_controller.toast_expiry_time:
+            # Draw Real-Time HUD Action Toast Banner (only if gestures armed)
+            if (
+                self._gestures_enabled
+                and self.gesture_controller.active_toast
+                and time.time() < self.gesture_controller.toast_expiry_time
+            ):
                 annotated = draw_action_toast(annotated, self.gesture_controller.active_toast)
 
             # 10. Encode to JPEG
@@ -564,7 +635,7 @@ class AuraBridge:
             active_tracks = (
                 len(self.tracker.active_tracks) if self._tracking_enabled else 0
             )
-            ocr_count = len(self._last_ocr_texts)
+            ocr_count = len(self._last_ocr_texts) if self._ocr_enabled else 0
             sahi_active = bool(
                 self.detector.sahi_config and self.detector.sahi_config.enabled
             )
@@ -577,7 +648,11 @@ class AuraBridge:
                 
                 toast_str = (
                     self.gesture_controller.active_toast
-                    if (self.gesture_controller.active_toast and time.time() < self.gesture_controller.toast_expiry_time)
+                    if (
+                        self._gestures_enabled
+                        and self.gesture_controller.active_toast
+                        and time.time() < self.gesture_controller.toast_expiry_time
+                    )
                     else None
                 )
 
@@ -593,6 +668,8 @@ class AuraBridge:
                     sahi_enabled=sahi_active,
                     tracking_enabled=self._tracking_enabled,
                     ocr_enabled=self._ocr_enabled,
+                    gestures_enabled=self._gestures_enabled,
+                    target_filter_mode=self._target_filter_mode.value,
                     voice_listening=self._voice_listening,
                     ann_version=self.reliability_ann.model_version,
                     memory_enabled=self._enable_memory,
@@ -745,6 +822,20 @@ class AuraBridge:
             self.gesture_controller.trigger_toast("🤘 SAHI HIGH-RES ENABLED (320px Slices)", duration=2.0)
             return True
 
+    def toggle_gestures(self) -> bool:
+        """Toggles 3D hand gestures master armed state on/off and returns new state."""
+        self._gestures_enabled = not self._gestures_enabled
+        state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
+        return self._gestures_enabled
+
+    def set_gestures(self, enabled: bool) -> bool:
+        """Explicitly sets 3D hand gestures armed state."""
+        self._gestures_enabled = enabled
+        state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
+        return self._gestures_enabled
+
     def toggle_tracking(self) -> bool:
         """Toggles tracking on/off and returns new state."""
         self._tracking_enabled = not self._tracking_enabled
@@ -753,11 +844,67 @@ class AuraBridge:
         return self._tracking_enabled
 
     def toggle_ocr(self) -> bool:
-        """Toggles OCR on/off and returns new state."""
+        """Toggles OCR on/off, flushes OCR text buffer immediately when disabled, and returns new state."""
         self._ocr_enabled = not self._ocr_enabled
+        if not self._ocr_enabled:
+            self._last_ocr_texts = []
         state_str = "ENABLED" if self._ocr_enabled else "DISABLED"
         self.gesture_controller.trigger_toast(f"OCR TEXT SCANNER {state_str}", duration=1.5)
         return self._ocr_enabled
+
+    def set_ocr(self, enabled: bool) -> bool:
+        """Explicitly sets OCR state and clears cached text detections when disabled."""
+        self._ocr_enabled = enabled
+        if not self._ocr_enabled:
+            self._last_ocr_texts = []
+        return self._ocr_enabled
+
+    def set_target_filter_mode(self, mode: str) -> str:
+        """Sets the perception filter category mode ('ALL', 'OBJECTS_ONLY', 'HUMANS_ONLY', 'OFF')."""
+        mode_upper = mode.upper().strip()
+        if mode_upper in [m.value for m in TargetFilterMode]:
+            self._target_filter_mode = TargetFilterMode(mode_upper)
+        else:
+            self._target_filter_mode = TargetFilterMode.ALL
+        
+        # Purge existing tracks immediately to eliminate latency or stale bounding boxes
+        if hasattr(self.tracker, "clear"):
+            self.tracker.clear()
+        
+        toast_labels = {
+            TargetFilterMode.ALL: "🌐 PERCEPTION: BOTH (ALL TARGETS)",
+            TargetFilterMode.OBJECTS_ONLY: "📦 PERCEPTION: ONLY OBJECTS",
+            TargetFilterMode.HUMANS_ONLY: "👤 PERCEPTION: ONLY HUMAN FEATURES",
+            TargetFilterMode.OFF: "🛑 PERCEPTION: OFF (DETECTION MUTED)",
+        }
+        self.gesture_controller.trigger_toast(toast_labels[self._target_filter_mode], duration=2.0)
+        
+        # Broadcast config update event immediately to all WebSockets
+        if self._event_broadcaster:
+            try:
+                self._event_broadcaster({
+                    "type": "config_update",
+                    "data": {"target_filter_mode": self._target_filter_mode.value},
+                })
+            except Exception as e:
+                logger.debug(f"Filter broadcaster error: {e}")
+                
+        return self._target_filter_mode.value
+
+    def cycle_target_filter_mode(self) -> str:
+        """Cycles perception filter: ALL -> OBJECTS_ONLY -> HUMANS_ONLY -> OFF -> ALL."""
+        cycle_order = [
+            TargetFilterMode.ALL,
+            TargetFilterMode.OBJECTS_ONLY,
+            TargetFilterMode.HUMANS_ONLY,
+            TargetFilterMode.OFF,
+        ]
+        try:
+            current_idx = cycle_order.index(self._target_filter_mode)
+            next_mode = cycle_order[(current_idx + 1) % len(cycle_order)]
+        except ValueError:
+            next_mode = TargetFilterMode.ALL
+        return self.set_target_filter_mode(next_mode.value)
 
     def toggle_voice(self) -> bool:
         """Toggles Voice Assistant listening mode."""
