@@ -153,6 +153,22 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'toggle_voice' });
   }, [sendMessage]);
 
+  const toggleGestures = useCallback(() => {
+    sendMessage({ type: 'toggle_gestures' });
+  }, [sendMessage]);
+
+  const setGestures = useCallback((enabled) => {
+    sendMessage({ type: 'set_gestures', enabled });
+  }, [sendMessage]);
+
+  const setTargetFilter = useCallback((mode) => {
+    sendMessage({ type: 'set_target_filter', mode });
+  }, [sendMessage]);
+
+  const cycleTargetFilter = useCallback(() => {
+    sendMessage({ type: 'cycle_target_filter' });
+  }, [sendMessage]);
+
   return {
     isConnected,
     lastFrame,
@@ -173,6 +189,10 @@ export function useWebSocket(url = null) {
     toggleTracking,
     toggleOCR,
     toggleVoice,
+    toggleGestures,
+    setGestures,
+    setTargetFilter,
+    cycleTargetFilter,
     sendMessage,
   };
 }

@@ -260,3 +260,8 @@ class ObjectTracker:
         self._tracks = [t for t in self._tracks if t.time_since_update <= self.max_age]
 
         return detections
+
+    def clear(self) -> None:
+        """Clears all active and history tracks."""
+        self._tracks = []
+        self._next_id = 1

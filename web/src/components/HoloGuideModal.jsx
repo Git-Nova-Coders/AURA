@@ -5,7 +5,13 @@ import { soundFX } from '../utils/audioFx';
  * HoloGuideModal — Interactive Holographic Gesture Command Manual
  * displaying all 9 3D hand gestures with live detection verification.
  */
-export default function HoloGuideModal({ isOpen, onClose, activeGesture }) {
+export default function HoloGuideModal({
+  isOpen,
+  onClose,
+  activeGesture,
+  isGesturesArmed = false,
+  onToggleGestures,
+}) {
   if (!isOpen) return null;
 
   const gestures = [
@@ -100,6 +106,29 @@ export default function HoloGuideModal({ isOpen, onClose, activeGesture }) {
             onClick={() => { soundFX.playToggle(false); onClose(); }}
           >
             ✕
+          </button>
+        </div>
+
+        {/* ── Armed Status Alert Banner ── */}
+        <div className={`holo-modal-status-banner ${isGesturesArmed ? 'banner-armed' : 'banner-standby'}`}>
+          <div className="status-banner-left">
+            <span className="status-banner-icon">{isGesturesArmed ? '✅' : '⚠️'}</span>
+            <div>
+              <span className="status-banner-title">
+                {isGesturesArmed ? '3D GESTURES SYSTEM: ARMED & ACTIVE' : '3D GESTURES SYSTEM: STANDBY (OFF)'}
+              </span>
+              <p className="status-banner-desc">
+                {isGesturesArmed
+                  ? 'Kinematic hand tracking is live. Poses in front of the camera will execute commands.'
+                  : 'Gestures are currently disabled. Click the ARM button below to activate 3D recognition.'}
+              </p>
+            </div>
+          </div>
+          <button
+            className={`btn-toggle-arm ${isGesturesArmed ? 'btn-disarm' : 'btn-arm'}`}
+            onClick={() => onToggleGestures && onToggleGestures()}
+          >
+            {isGesturesArmed ? 'DISARM GESTURES' : '⚡ ARM GESTURES'}
           </button>
         </div>
 

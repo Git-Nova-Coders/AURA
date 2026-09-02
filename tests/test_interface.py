@@ -29,6 +29,8 @@ class TestTelemetrySnapshot(unittest.TestCase):
         self.assertEqual(t.detection_count, 0)
         self.assertFalse(t.sahi_enabled)
         self.assertTrue(t.tracking_enabled)
+        self.assertFalse(t.gestures_enabled)
+        self.assertEqual(t.target_filter_mode, "ALL")
 
     def test_to_dict(self):
         from interface.bridge import TelemetrySnapshot
@@ -41,6 +43,8 @@ class TestTelemetrySnapshot(unittest.TestCase):
             ocr_text_count=2,
             sahi_enabled=True,
             tracking_enabled=True,
+            gestures_enabled=True,
+            target_filter_mode="OBJECTS_ONLY",
             ann_version="ann_v1",
             memory_enabled=True,
             rag_enabled=True,
@@ -54,6 +58,8 @@ class TestTelemetrySnapshot(unittest.TestCase):
         self.assertEqual(d["ocr_text_count"], 2)
         self.assertTrue(d["sahi_enabled"])
         self.assertTrue(d["tracking_enabled"])
+        self.assertTrue(d["gestures_enabled"])
+        self.assertEqual(d["target_filter_mode"], "OBJECTS_ONLY")
         self.assertEqual(d["ann_version"], "ann_v1")
         self.assertTrue(d["memory_enabled"])
         self.assertTrue(d["rag_enabled"])
@@ -329,6 +335,136 @@ class TestFastAPIEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("detections", data)
+
+
+class TestBridgePerceptionControls(unittest.TestCase):
+    """Tests for Gesture Master Armed Switch, OCR Cache Flushing, and Target Filter Modes."""
+
+    @patch("interface.bridge.GestureActionController")
+    @patch("interface.bridge.ObjectDetector")
+    @patch("interface.bridge.ReliabilityInference")
+    @patch("interface.bridge.RAGEngine")
+    @patch("interface.bridge.EpisodicMemory")
+    def setUp(self, mock_mem, mock_rag, mock_ann, mock_det, mock_gest):
+        from interface.bridge import AuraBridge
+        self.bridge = AuraBridge(
+            source="synthetic",
+            enable_ocr=True,
+            enable_gestures=False,
+            enable_rag=False,
+            enable_memory=False,
+        )
+
+    def test_gestures_toggle_and_set(self):
+        self.assertFalse(self.bridge._gestures_enabled)
+        res = self.bridge.toggle_gestures()
+        self.assertTrue(res)
+        self.assertTrue(self.bridge._gestures_enabled)
+
+        res2 = self.bridge.set_gestures(False)
+        self.assertFalse(res2)
+        self.assertFalse(self.bridge._gestures_enabled)
+
+    def test_ocr_disabled_flushes_cache(self):
+        from ocr.engine import TextDetection
+        self.bridge._last_ocr_texts = [
+            TextDetection(text="SAMPLE", confidence=0.9, bbox=[10, 10, 50, 50])
+        ]
+        self.assertTrue(self.bridge._ocr_enabled)
+        self.assertEqual(len(self.bridge._last_ocr_texts), 1)
+
+        # Toggle OCR OFF -> cache must be immediately emptied!
+        res = self.bridge.toggle_ocr()
+        self.assertFalse(res)
+        self.assertFalse(self.bridge._ocr_enabled)
+        self.assertEqual(len(self.bridge._last_ocr_texts), 0)
+
+    def test_target_filter_objects_only(self):
+        from vision.detector import Detection
+        from interface.bridge import TargetFilterMode
+        
+        self.bridge.set_target_filter_mode("OBJECTS_ONLY")
+        self.assertEqual(self.bridge._target_filter_mode, TargetFilterMode.OBJECTS_ONLY)
+
+        raw_dets = [
+            Detection(class_id=0, class_name="person", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=1, class_name="human face", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=2, class_name="human hand", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=3, class_name="open palm", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=4, class_name="pointing hand", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=5, class_name="thumbs up", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=6, class_name="laptop", confidence=0.95, bbox=[10, 10, 50, 50]),
+            Detection(class_id=7, class_name="cup", confidence=0.85, bbox=[20, 20, 30, 30]),
+            Detection(class_id=8, class_name="water bottle", confidence=0.85, bbox=[20, 20, 30, 30]),
+        ]
+
+        filtered = self.bridge._apply_target_filter(raw_dets)
+        self.assertEqual(len(filtered), 3)
+        names = [d.class_name for d in filtered]
+        self.assertIn("laptop", names)
+        self.assertIn("cup", names)
+        self.assertIn("water bottle", names)
+        self.assertNotIn("person", names)
+        self.assertNotIn("human face", names)
+        self.assertNotIn("human hand", names)
+        self.assertNotIn("open palm", names)
+        self.assertNotIn("pointing hand", names)
+        self.assertNotIn("thumbs up", names)
+
+    def test_target_filter_humans_only(self):
+        from vision.detector import Detection
+        from interface.bridge import TargetFilterMode
+
+        self.bridge.set_target_filter_mode("HUMANS_ONLY")
+        self.assertEqual(self.bridge._target_filter_mode, TargetFilterMode.HUMANS_ONLY)
+
+        raw_dets = [
+            Detection(class_id=0, class_name="person", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=1, class_name="human face", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=2, class_name="human hand", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=3, class_name="laptop", confidence=0.95, bbox=[10, 10, 50, 50]),
+            Detection(class_id=4, class_name="cup", confidence=0.85, bbox=[20, 20, 30, 30]),
+        ]
+
+        filtered = self.bridge._apply_target_filter(raw_dets)
+        self.assertEqual(len(filtered), 3)
+        names = [d.class_name for d in filtered]
+        self.assertIn("person", names)
+        self.assertIn("human face", names)
+        self.assertIn("human hand", names)
+        self.assertNotIn("laptop", names)
+        self.assertNotIn("cup", names)
+
+    def test_target_filter_off(self):
+        from vision.detector import Detection
+        from interface.bridge import TargetFilterMode
+
+        self.bridge.set_target_filter_mode("OFF")
+        self.assertEqual(self.bridge._target_filter_mode, TargetFilterMode.OFF)
+
+        raw_dets = [
+            Detection(class_id=0, class_name="person", confidence=0.9, bbox=[0, 0, 10, 10]),
+            Detection(class_id=1, class_name="laptop", confidence=0.95, bbox=[10, 10, 50, 50]),
+        ]
+
+        filtered = self.bridge._apply_target_filter(raw_dets)
+        self.assertEqual(len(filtered), 0)
+
+    def test_cycle_target_filter(self):
+        from interface.bridge import TargetFilterMode
+        self.bridge.set_target_filter_mode("ALL")
+        
+        mode2 = self.bridge.cycle_target_filter_mode()
+        self.assertEqual(mode2, "OBJECTS_ONLY")
+        
+        mode3 = self.bridge.cycle_target_filter_mode()
+        self.assertEqual(mode3, "HUMANS_ONLY")
+        
+        mode4 = self.bridge.cycle_target_filter_mode()
+        self.assertEqual(mode4, "OFF")
+
+        mode5 = self.bridge.cycle_target_filter_mode()
+        self.assertEqual(mode5, "ALL")
 
 
 class TestInterfacePackageInit(unittest.TestCase):
