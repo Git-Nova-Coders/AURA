@@ -466,6 +466,15 @@ class TestBridgePerceptionControls(unittest.TestCase):
         mode5 = self.bridge.cycle_target_filter_mode()
         self.assertEqual(mode5, "ALL")
 
+    def test_inspect_target_glasses_grounded_description(self):
+        """Verify inspect_target for glasses yields proper optical eyewear description without person hijacking."""
+        result = self.bridge.inspect_target("glasses")
+        self.assertEqual(result["target"], "glasses")
+        resp_text = result["response"]["response_text"].lower()
+        self.assertIn("glasses", resp_text)
+        self.assertNotIn("living being", resp_text)
+        self.assertNotIn("dynamic posture", resp_text)
+
 
 class TestInterfacePackageInit(unittest.TestCase):
     """Tests for the interface package init."""

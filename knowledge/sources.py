@@ -221,6 +221,81 @@ class CuratedKnowledgeSource(KnowledgeSource):
                 "workspace": "Acts as the central spatial surface for object spatial relation queries.",
             },
         },
+        "glasses": {
+            "title": "Eyeglasses / Optical Glasses",
+            "category": "Personal Wear / Eyewear & Optics",
+            "summary": "An optical frame bearing lenses worn in front of the eyes for vision correction, reading clarity, blue-light filtering, or physical eye protection.",
+            "details": {
+                "types": ["Prescription eyeglasses", "Reading spectacles", "Blue-light filtering glasses", "Safety glasses"],
+                "primary_components": ["Optical lenses", "Frames", "Nose pads", "Bridge", "Temples / arms"],
+                "typical_usage": "Refractive error correction (myopia, hyperopia, astigmatism), reading assistance, and digital screen eye strain reduction.",
+                "care": "Clean using microfiber cloth and lens cleaner spray; store in protective rigid case.",
+            },
+        },
+        "sunglasses": {
+            "title": "Sunglasses / Tinted Eyewear",
+            "category": "Personal Wear / Eye & Sun Protection",
+            "summary": "Protective eyewear featuring darkened or polarized lenses designed to shield the eyes from bright sunlight, glare, and harmful UV radiation.",
+            "details": {
+                "features": ["UV400 protection", "Polarized glare reduction", "Anti-reflective coating"],
+                "typical_usage": "Outdoor vision comfort, driving safety, and ocular protection against ultraviolet rays.",
+            },
+        },
+        "headphones": {
+            "title": "Headphones / Audio Headset",
+            "category": "Electronics / Personal Audio",
+            "summary": "A pair of small acoustic transducer drivers worn on or over the ears, allowing private listening to audio, media, and voice communications.",
+            "details": {
+                "form_factors": ["Over-ear (Circumaural)", "On-ear (Supra-aural)", "In-ear (Earbuds)"],
+                "features": ["Active Noise Cancellation (ANC)", "Bluetooth wireless connectivity", "Integrated microphone array"],
+                "typical_usage": "High-fidelity media playback, video conferencing, audio monitoring, and hands-free calling.",
+            },
+        },
+        "wrist watch": {
+            "title": "Wrist Watch / Timepiece",
+            "category": "Personal Accessories / Chronometer",
+            "summary": "A wearable precision timepiece mounted on a strap around the wrist, providing continuous timekeeping, scheduling, and biometric health metrics.",
+            "details": {
+                "types": ["Smartwatch", "Quartz analog", "Mechanical automatic"],
+                "features": ["Timekeeping", "Heart rate monitor", "Step counting", "Notifications"],
+            },
+        },
+        "handbag": {
+            "title": "Handbag / Personal Carry",
+            "category": "Accessories / Personal Carry",
+            "summary": "A handled bag or purse used to hold, organize, and transport personal items such as wallets, keys, mobile devices, and documents.",
+            "details": {
+                "styles": ["Tote bag", "Shoulder bag", "Crossbody", "Clutch"],
+                "typical_usage": "Everyday carry, commuting, and secure personal item storage.",
+            },
+        },
+        "human face": {
+            "title": "Human Face / Biometric Profile",
+            "category": "Biometrics / Facial Anatomy",
+            "summary": "The facial region of a person comprising eyes, nose, and mouth, tracked for head pose, expression, and gaze direction.",
+            "details": {
+                "features": ["Eyes", "Nose", "Mouth", "Eyebrows", "Jawline"],
+                "analysis": "Head pose estimation, facial expression recognition, and visual attention tracking.",
+            },
+        },
+        "human hand": {
+            "title": "Human Hand / 21-Keypoint Skeleton",
+            "category": "Biometrics / Hand Articulation",
+            "summary": "A prehensile, multi-fingered extremity located at the end of the human forearm, capable of fine motor manipulation, tool use, and 3D spatial gesture communication.",
+            "details": {
+                "structure": ["Thumb", "Index finger", "Middle finger", "Ring finger", "Pinky finger", "Palm / Wrist"],
+                "gesture_tracking": "Tracked via MediaPipe 21 3D landmarks for real-time raycasting, air-pinch inspection, and tactical mode switching.",
+            },
+        },
+        "water bottle": {
+            "title": "Water Bottle / Hydration Container",
+            "category": "Kitchenware / Hydration",
+            "summary": "A portable container designed to hold water and beverages for hydration on the go.",
+            "details": {
+                "materials": ["Insulated stainless steel", "BPA-free plastic", "Borosilicate glass"],
+                "typical_usage": "Hydration, fitness, travel, and personal beverage transport.",
+            },
+        },
     }
 
     # Synonym aliases mapping query terms to canonical database keys
@@ -235,7 +310,6 @@ class CuratedKnowledgeSource(KnowledgeSource):
         "monitor": "tv",
         "mug": "cup",
         "teacup": "cup",
-        "water bottle": "bottle",
         "flask": "bottle",
         "desk": "dining table",
         "table": "dining table",
@@ -245,8 +319,25 @@ class CuratedKnowledgeSource(KnowledgeSource):
         "man": "person",
         "woman": "person",
         "kid": "person",
-        "glasses": "person",
-        "eyeglass": "person",
+        "eyeglass": "glasses",
+        "eyeglasses": "glasses",
+        "spectacles": "glasses",
+        "spectacle": "glasses",
+        "reading glasses": "glasses",
+        "sun glasses": "sunglasses",
+        "shades": "sunglasses",
+        "headset": "headphones",
+        "earphones": "headphones",
+        "earbuds": "headphones",
+        "watch": "wrist watch",
+        "smartwatch": "wrist watch",
+        "smart watch": "wrist watch",
+        "purse": "handbag",
+        "bag": "handbag",
+        "tote": "handbag",
+        "face": "human face",
+        "hand": "human hand",
+        "computer mouse": "mouse",
     }
 
     def __init__(self, custom_db: Optional[Dict[str, Dict[str, Any]]] = None):

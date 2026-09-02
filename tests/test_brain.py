@@ -2,7 +2,13 @@
 Unit tests for AURA Brain, Context Manager, Intent Classifier, and Conversation Engine (Milestone 6).
 """
 
+import os
+import sys
 import unittest
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from vision.detector import Detection
 from ocr.engine import TextDetection
 from brain.context import ContextManager, ObjectEntity, SceneContext, SpatialRelation
@@ -153,6 +159,23 @@ class TestConversationEngine(unittest.TestCase):
         self.assertIn("laptop", resp.response_text.lower())
         self.assertIn("computing", resp.response_text.lower())
         self.assertIsNotNone(resp.knowledge_item)
+
+    def test_glasses_inspection_not_hijacked_by_person(self):
+        """Verify inspecting glasses gives eyeglasses description even if person is in scene center."""
+        dets = [
+            Detection(class_id=0, class_name="person", confidence=0.90, bbox=[200, 100, 440, 400], track_id=1),
+            Detection(class_id=18, class_name="glasses", confidence=0.85, bbox=[300, 120, 360, 160], track_id=2),
+        ]
+        self.context.update(dets, frame_shape=(480, 640))
+
+        # Query glasses specifically
+        resp = self.engine.respond("Describe glasses in detail")
+        self.assertEqual(resp.intent, IntentType.OBJECT_INFO)
+        self.assertIn("glasses", resp.response_text.lower())
+        self.assertNotIn("bipedal", resp.response_text.lower())
+        self.assertNotIn("living being", resp.response_text.lower())
+        self.assertIsNotNone(resp.knowledge_item)
+        self.assertEqual(resp.knowledge_item.title, "Eyeglasses / Optical Glasses")
 
     def test_object_location_response(self):
         """Verify spatial location reporting."""

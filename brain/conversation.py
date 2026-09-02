@@ -135,11 +135,15 @@ class ConversationEngine:
 
     def _handle_object_info(self, parsed: ParsedQuery) -> ConversationResponse:
         target_entity = None
-        if parsed.target_object:
+        is_pronoun_target = parsed.target_object in ("it", "this", "that", "object") or not parsed.target_object
+
+        if parsed.target_object and not is_pronoun_target:
             target_entity = self.context_manager.get_entity_by_class(parsed.target_object)
-        if not target_entity and parsed.track_id:
+        elif parsed.track_id:
             target_entity = self.context_manager.get_entity_by_track_id(parsed.track_id)
-        if not target_entity:
+        
+        # Only resolve generic reference if the query was referring to pronouns/unspecified targets
+        if not target_entity and is_pronoun_target:
             target_entity = self.context_manager.resolve_reference(parsed.raw_query)
 
         # If entity is in current scene

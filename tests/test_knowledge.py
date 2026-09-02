@@ -2,9 +2,14 @@
 Unit tests for AURA Knowledge Retrieval Engine (Milestone 6).
 """
 
+import os
+import sys
 import time
 import unittest
 from unittest.mock import patch, MagicMock
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from vision.detector import Detection
 from ocr.engine import TextDetection
@@ -76,6 +81,22 @@ class TestKnowledgeSources(unittest.TestCase):
         phone = source.lookup("smartphone")
         self.assertIsNotNone(phone)
         self.assertEqual(phone.title, "Smartphone / Cell Phone")
+
+        # "eyeglasses" -> glasses (Must NOT map to person!)
+        glasses = source.lookup("eyeglasses")
+        self.assertIsNotNone(glasses)
+        self.assertEqual(glasses.title, "Eyeglasses / Optical Glasses")
+        self.assertIn("eyewear", glasses.category.lower())
+
+        # "spectacles" -> glasses
+        specs = source.lookup("spectacles")
+        self.assertIsNotNone(specs)
+        self.assertEqual(specs.title, "Eyeglasses / Optical Glasses")
+
+        # "headphones" -> headphones
+        hp = source.lookup("headphones")
+        self.assertIsNotNone(hp)
+        self.assertEqual(hp.title, "Headphones / Audio Headset")
 
     def test_curated_knowledge_source_missing(self):
         """Verify unknown entity returns None without raising an exception."""
