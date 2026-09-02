@@ -7,11 +7,13 @@ import { soundFX } from '../utils/audioFx';
  */
 export default function TacticalViewport({
   frame,
-  scene,
   telemetry,
+  scene,
   activeToast,
-  onObjectClick,
+  onInspect,
   onOpenGuide,
+  onToggleGestures,
+  onSetTargetFilter,
 }) {
   const canvasRef = useRef(null);
   const imgRef = useRef(new Image());
@@ -20,12 +22,14 @@ export default function TacticalViewport({
   const [isFlashing, setIsFlashing] = useState(false);
   const prevToastRef = useRef(null);
 
-  const isFrozen = telemetry?.gesture_mode === 'FROZEN';
-  const isSAHI = telemetry?.sahi_enabled;
+  const isSAHI = telemetry?.sahi_enabled ?? false;
+  const isGestures = telemetry?.gestures_enabled ?? false;
   const isVoice = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
   const isClean = telemetry?.gesture_mode === 'HIDE_BOXES';
-  const pointedTarget = telemetry?.pointed_target;
+  const isFrozen = telemetry?.gesture_mode === 'FROZEN';
   const activeGesture = telemetry?.active_gesture || 'none';
+  const pointedTarget = telemetry?.pointed_target;
+  const filterMode = telemetry?.target_filter_mode || 'ALL';
 
   // Trigger sound and flash on snapshot toast
   useEffect(() => {
@@ -122,8 +126,40 @@ export default function TacticalViewport({
           <span className="viewport-coords">CAM_01 // 640×480 @ 60FPS</span>
         </div>
         <div className="viewport-title-right">
-          {isSAHI && <span className="tag-sahi">🤘 SAHI SLICED (320px)</span>}
-          {scene && <span className="tag-count">{scene.entity_count || 0} TARGETS</span>}
+          {/* Quick Perception Mode Chips (4 Modes: Omni View, Objects Only, Humans Only, Muted Off) */}
+          <div className="viewport-filter-chips">
+            <button
+              className={`chip-filter ${filterMode === 'ALL' ? 'chip-active' : ''}`}
+              onClick={() => onSetTargetFilter && onSetTargetFilter('ALL')}
+              title="Omni Perception: Both Physical Objects and Biological Humans"
+            >
+              🌐 OMNI VIEW
+            </button>
+            <button
+              className={`chip-filter ${filterMode === 'OBJECTS_ONLY' ? 'chip-active' : ''}`}
+              onClick={() => onSetTargetFilter && onSetTargetFilter('OBJECTS_ONLY')}
+              title="Perceive Inanimate Objects Only (No Humans, Faces or Skeletons)"
+            >
+              📦 OBJECTS ONLY
+            </button>
+            <button
+              className={`chip-filter ${filterMode === 'HUMANS_ONLY' ? 'chip-active' : ''}`}
+              onClick={() => onSetTargetFilter && onSetTargetFilter('HUMANS_ONLY')}
+              title="Perceive Biological Humans & Faces Only"
+            >
+              👤 HUMANS ONLY
+            </button>
+            <button
+              className={`chip-filter ${filterMode === 'OFF' ? 'chip-active-red' : ''}`}
+              onClick={() => onSetTargetFilter && onSetTargetFilter('OFF')}
+              title="Mute Perception (No detections)"
+            >
+              🛑 MUTED
+            </button>
+          </div>
+
+          {isSAHI && <span className="tag-sahi">🤘 SAHI SLICED</span>}
+          {scene && <span className="tag-count">{filterMode === 'OFF' ? 0 : (scene.entity_count || 0)} TARGETS</span>}
         </div>
       </div>
 
@@ -152,6 +188,22 @@ export default function TacticalViewport({
 
         {/* Dynamic State Overlay Banners */}
         <div className="viewport-status-stack">
+          {filterMode === 'OFF' && (
+            <div className="holo-state-pill pill-off animate-slide-in">
+              <span>🛑 PERCEPTION MUTED (OFF)</span>
+            </div>
+          )}
+
+          {!isGestures && (
+            <div
+              className="holo-state-pill pill-standby animate-slide-in cursor-pointer"
+              onClick={() => onToggleGestures && onToggleGestures()}
+              title="Click to Arm 3D Hand Gestures"
+            >
+              <span>🖐️ GESTURES STANDBY (CLICK TO ARM)</span>
+            </div>
+          )}
+
           {isSAHI && (
             <div className="holo-state-pill pill-sahi animate-slide-in">
               <span className="pill-pulse-dot dot-emerald"></span>
@@ -204,15 +256,29 @@ export default function TacticalViewport({
 
         {/* Floating 3D Gesture Hologram Pill (Bottom Left) */}
         <div className="holo-gesture-dock">
-          <div className={`holo-gesture-ring ${activeGesture !== 'none' ? 'ring-active' : ''}`}>
-            <span className="gesture-holo-icon">{gestureIcons[activeGesture] || '✋'}</span>
-            <div className="gesture-holo-meta">
-              <span className="gesture-holo-name">
-                {activeGesture === 'none' ? 'AWAITING GESTURE' : activeGesture.replace('_', ' ').toUpperCase()}
-              </span>
-              <span className="gesture-holo-sub">21-LANDMARK 3D KINEMATICS</span>
+          {isGestures ? (
+            <div className={`holo-gesture-ring ${activeGesture !== 'none' ? 'ring-active' : ''}`}>
+              <span className="gesture-holo-icon">{gestureIcons[activeGesture] || '✋'}</span>
+              <div className="gesture-holo-meta">
+                <span className="gesture-holo-name">
+                  {activeGesture === 'none' ? 'AWAITING GESTURE' : activeGesture.replace('_', ' ').toUpperCase()}
+                </span>
+                <span className="gesture-holo-sub">ARMED // 21-LANDMARK 3D</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              className="holo-gesture-ring ring-standby cursor-pointer"
+              onClick={() => onToggleGestures && onToggleGestures()}
+              title="Click to Arm 3D Hand Gestures"
+            >
+              <span className="gesture-holo-icon">🖐️</span>
+              <div className="gesture-holo-meta">
+                <span className="gesture-holo-name">GESTURES STANDBY</span>
+                <span className="gesture-holo-sub">CLICK TO ARM</span>
+              </div>
+            </div>
+          )}
 
           <button
             className="btn-holo-manual"

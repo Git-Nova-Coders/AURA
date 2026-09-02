@@ -6,7 +6,13 @@ import { soundFX } from '../utils/audioFx';
  * EntityMatrix — Left Wing Tactical Intelligence Hub
  * featuring live Holographic Radar, spatial object listing, reliability bars, and quick lock actions.
  */
-export default function EntityMatrix({ scene, pointedTarget, onSelectEntity }) {
+export default function EntityMatrix({
+  scene,
+  pointedTarget,
+  onSelectEntity,
+  filterMode = 'ALL',
+  onSetTargetFilter,
+}) {
   const entities = scene?.entities || [];
 
   const handleEntityClick = (entity) => {
@@ -34,6 +40,13 @@ export default function EntityMatrix({ scene, pointedTarget, onSelectEntity }) {
     return map[name?.toLowerCase()] || '📦';
   };
 
+  const getFilterBadge = () => {
+    if (filterMode === 'OBJECTS_ONLY') return '📦 OBJECTS ONLY';
+    if (filterMode === 'HUMANS_ONLY') return '👤 HUMANS ONLY';
+    if (filterMode === 'OFF') return '🛑 PERCEPTION MUTED';
+    return '🌐 OMNI VIEW';
+  };
+
   return (
     <div className="entity-matrix-panel glass-panel">
       {/* ── Panel Header ── */}
@@ -42,7 +55,7 @@ export default function EntityMatrix({ scene, pointedTarget, onSelectEntity }) {
           <span className="panel-icon">🛰️</span>
           <span className="panel-title">SPATIAL SCENE MATRIX</span>
         </div>
-        <span className="badge badge-cyan">{entities.length} OBJECTS</span>
+        <span className="badge badge-cyan">{getFilterBadge()}</span>
       </div>
 
       {/* ── Tactical Holographic Radar ── */}
@@ -56,7 +69,7 @@ export default function EntityMatrix({ scene, pointedTarget, onSelectEntity }) {
       <div className="entity-stream-section">
         <div className="stream-header">
           <span className="stream-title">DETECTED ENTITY REGISTRY</span>
-          <span className="stream-subtitle">TRACKED IN CAMERA VIEW</span>
+          <span className="stream-subtitle">{entities.length} ACTIVE // {getFilterBadge()}</span>
         </div>
 
         <div className="entity-stream-list">

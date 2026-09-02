@@ -38,21 +38,26 @@ export default function App() {
           onOpenGuide={() => setIsGuideOpen(true)}
         />
 
-        {/* ── 2. Left Wing: Spatial Scene Matrix & Holographic Radar ── */}
+        {/* ── 2. Left Wing: Spatial Scene Matrix & Radar ── */}
         <EntityMatrix
           scene={ws.scene}
           pointedTarget={ws.telemetry?.pointed_target}
           onSelectEntity={handleSelectEntity}
+          filterMode={ws.telemetry?.target_filter_mode}
+          onSetTargetFilter={ws.setTargetFilter}
         />
 
-        {/* ── 3. Centerpiece: Tactical Vision Perception Viewport ── */}
+        {/* ── 3. Center HUD: Tactical Primary Sensor Feed ── */}
         <TacticalViewport
           frame={ws.lastFrame}
           scene={ws.scene}
           telemetry={ws.telemetry}
           activeToast={ws.activeToast}
+          filterMode={ws.telemetry?.target_filter_mode}
           onObjectClick={handleSelectEntity}
           onOpenGuide={() => setIsGuideOpen(true)}
+          onToggleGestures={ws.toggleGestures}
+          onSetTargetFilter={ws.setTargetFilter}
         />
 
         {/* ── 4. Right Wing: Neural Intelligence & Multimodal Terminal ── */}
@@ -69,10 +74,14 @@ export default function App() {
         {/* ── 5. Bottom Deck: Tactical Control Matrix & LED Switches ── */}
         <TacticalDeck
           telemetry={ws.telemetry}
+          filterMode={ws.telemetry?.target_filter_mode}
           onToggleSAHI={ws.toggleSAHI}
           onToggleTracking={ws.toggleTracking}
           onToggleOCR={ws.toggleOCR}
           onToggleVoice={ws.toggleVoice}
+          onToggleGestures={ws.toggleGestures}
+          onCycleTargetFilter={ws.cycleTargetFilter}
+          onSetTargetFilter={ws.setTargetFilter}
         />
 
         {/* ── 6. Holographic Gesture Command Manual Modal ── */}
@@ -80,6 +89,8 @@ export default function App() {
           isOpen={isGuideOpen}
           onClose={() => setIsGuideOpen(false)}
           activeGesture={ws.telemetry?.active_gesture}
+          isGesturesArmed={ws.telemetry?.gestures_enabled}
+          onToggleGestures={ws.toggleGestures}
         />
       </div>
     </>

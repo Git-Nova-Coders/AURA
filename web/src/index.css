@@ -189,3 +189,165 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-cyan);
 }
+
+/* ── Perception Mode Filter Chips (Viewport Top Bar) ── */
+.viewport-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(10, 15, 26, 0.6);
+  padding: 2px 4px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+.chip-filter {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.chip-filter:hover {
+  color: var(--text-primary);
+  background: rgba(0, 240, 255, 0.1);
+  border-color: rgba(0, 240, 255, 0.3);
+}
+
+.chip-filter.chip-active {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.25), rgba(0, 255, 157, 0.15));
+  border-color: var(--accent-cyan);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
+}
+
+.chip-filter.chip-active-red {
+  background: linear-gradient(135deg, rgba(255, 0, 85, 0.25), rgba(255, 183, 0, 0.15));
+  border-color: var(--accent-red);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
+}
+
+/* ── Gesture Standby & Armed Status Pills ── */
+.pill-standby {
+  background: rgba(255, 183, 0, 0.15) !important;
+  border: 1px solid rgba(255, 183, 0, 0.4) !important;
+  color: var(--accent-amber) !important;
+}
+
+.pill-off {
+  background: rgba(255, 0, 85, 0.15) !important;
+  border: 1px solid rgba(255, 0, 85, 0.4) !important;
+  color: var(--accent-red) !important;
+}
+
+.switch-card-off {
+  border-color: rgba(255, 0, 85, 0.3) !important;
+  opacity: 0.85;
+}
+
+.switch-card-off:hover {
+  border-color: var(--accent-red) !important;
+}
+
+.ring-standby {
+  border-color: rgba(255, 183, 0, 0.4) !important;
+  background: rgba(255, 183, 0, 0.08) !important;
+}
+
+.ring-standby:hover {
+  border-color: var(--accent-amber) !important;
+  box-shadow: 0 0 16px rgba(255, 183, 0, 0.3) !important;
+}
+
+/* ── Holo Guide Modal Armed Status Banner ── */
+.holo-modal-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 24px 18px 24px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+}
+
+.banner-armed {
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.12), rgba(0, 240, 255, 0.05));
+  border-color: rgba(0, 255, 157, 0.35);
+}
+
+.banner-standby {
+  background: linear-gradient(135deg, rgba(255, 183, 0, 0.12), rgba(255, 0, 85, 0.05));
+  border-color: rgba(255, 183, 0, 0.35);
+}
+
+.status-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-banner-icon {
+  font-size: 1.5rem;
+}
+
+.status-banner-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  display: block;
+}
+
+.status-banner-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.btn-toggle-arm {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.btn-arm {
+  background: linear-gradient(135deg, rgba(0, 255, 157, 0.25), rgba(0, 240, 255, 0.2));
+  border-color: var(--accent-emerald);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(0, 255, 157, 0.35);
+}
+
+.btn-arm:hover {
+  background: var(--accent-emerald);
+  color: #04070e;
+  box-shadow: 0 0 20px rgba(0, 255, 157, 0.6);
+}
+
+.btn-disarm {
+  background: rgba(255, 0, 85, 0.15);
+  border-color: rgba(255, 0, 85, 0.4);
+  color: #ff6b8b;
+}
+
+.btn-disarm:hover {
+  background: rgba(255, 0, 85, 0.3);
+  border-color: var(--accent-red);
+  color: #fff;
+}
+
