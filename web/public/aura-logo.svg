@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="auraGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f0ff" stop-opacity="1" />
+      <stop offset="40%" stop-color="#00f0ff" stop-opacity="0.8" />
+      <stop offset="80%" stop-color="#00ff9d" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#020612" stop-opacity="0" />
+    </radialGradient>
+    <filter id="neon" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Deep Void Circle -->
+  <circle cx="32" cy="32" r="30" fill="#020612" stroke="#00f0ff" stroke-width="1.5" />
+
+  <!-- Outer Dashed Tactical Ring -->
+  <circle cx="32" cy="32" r="25" fill="none" stroke="#00f0ff" stroke-width="1" stroke-dasharray="4 4" opacity="0.75" />
+
+  <!-- Inner Cyan Ring -->
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#00ff9d" stroke-width="1.5" stroke-dasharray="8 4" />
+
+  <!-- Core Radial Glow -->
+  <circle cx="32" cy="32" r="10" fill="url(#auraGlow)" filter="url(#neon)" />
+
+  <!-- Central Arc Reactor Core -->
+  <circle cx="32" cy="32" r="4.5" fill="#ffffff" />
+  
+  <!-- 4 Orbital Satellite Nodes -->
+  <circle cx="32" cy="7" r="2.5" fill="#00f0ff" />
+  <circle cx="57" cy="32" r="2.5" fill="#00ff9d" />
+  <circle cx="32" cy="57" r="2.5" fill="#00f0ff" />
+  <circle cx="7" cy="32" r="2.5" fill="#00ff9d" />
+</svg>

@@ -172,6 +172,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             "data": result,
                         }))
 
+                elif msg_type == "deselect_all":
+                    if _bridge:
+                        _bridge.deselect_target()
+                    await websocket.send_text(json.dumps({
+                        "type": "deselect_all",
+                        "data": {},
+                    }))
+
                 elif msg_type == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
 

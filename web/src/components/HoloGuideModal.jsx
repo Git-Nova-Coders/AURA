@@ -2,8 +2,9 @@ import React from 'react';
 import { soundFX } from '../utils/audioFx';
 
 /**
- * HoloGuideModal — Interactive Holographic Gesture Command Manual
- * displaying all 9 3D hand gestures with live detection verification.
+ * HoloGuideModal — Ultra-Futuristic Cybernetic 3D Gesture Matrix Manual
+ * High-contrast, vibrant, jaw-dropping aerospace HUD styling matching
+ * the AURA OS splash screen with 100% legibility and glowing neon aesthetics.
  */
 export default function HoloGuideModal({
   isOpen,
@@ -19,56 +20,56 @@ export default function HoloGuideModal({
       id: 'open_palm',
       icon: '🖐️',
       name: 'OPEN PALM',
-      rule: '5 fingers extended (θ > 140°)',
-      action: 'Clean Camera View: Hides bounding boxes for pure video.',
+      rule: 'All 5 fingers extended outward',
+      action: 'Clean Camera View (Hides all bounding boxes)',
       badge: 'VIEW',
     },
     {
       id: 'peace_sign',
       icon: '✌️',
-      name: 'VICTORY SIGN ("V")',
-      rule: 'Index + Middle extended (θ > 130°), others curled',
-      action: 'Capture Snapshot: Saves high-res image to captures/ with shutter FX.',
+      name: 'VICTORY ("V")',
+      rule: 'Index + Middle extended, others curled',
+      action: 'High-Res Frame Snapshot to captures/ folder',
       badge: 'CAPTURE',
     },
     {
       id: 'pointing',
       icon: '👉',
       name: 'POINTING RAY',
-      rule: 'Index extended (θ > 130°), Middle/Ring/Pinky curled',
-      action: 'Laser Lock-On: Projects raycast laser to lock target object with reticle.',
+      rule: 'Index finger extended, others curled',
+      action: 'Projects 3D Raycast Laser to lock target',
       badge: 'LOCK',
     },
     {
       id: 'pinch',
       icon: '👌',
       name: 'PINCH (AIR CLICK)',
-      rule: 'Thumb Tip + Index Tip 3D dist < 0.055',
-      action: 'Inspect Target: Triggers multimodal AI reasoning & voice explanation.',
+      rule: 'Thumb Tip + Index Tip pinched together',
+      action: 'Inspect Target: Multimodal AI reasoning & dossier',
       badge: 'INSPECT',
     },
     {
       id: 'thumbs_up',
       icon: '👍',
       name: 'THUMBS UP',
-      rule: 'Thumb extended (+Y), 4 fingers curled',
-      action: 'Restore All Boxes: Brings back all detections and resets target lock.',
+      rule: 'Thumb pointing upward (+Y), fingers curled',
+      action: 'Restore View: Unhides all boxes & resets lock',
       badge: 'RESET',
     },
     {
       id: 'thumbs_down',
       icon: '👎',
       name: 'THUMBS DOWN',
-      rule: 'Thumb downward (-Y), 4 fingers curled',
-      action: 'Deselect Target: Clears current object lock and resets focus.',
+      rule: 'Thumb pointing downward (-Y), fingers curled',
+      action: 'Deselect Target: Clears active focus & lock',
       badge: 'CLEAR',
     },
     {
       id: 'fist',
       icon: '✊',
       name: 'FIST',
-      rule: 'All 5 fingers curled into compact fist',
-      action: 'Freeze Frame: Freezes/unfreezes current overlay in place.',
+      rule: 'All 5 fingers curled into a tight fist',
+      action: 'Freeze Frame: Holds current perception overlay',
       badge: 'FREEZE',
     },
     {
@@ -76,7 +77,7 @@ export default function HoloGuideModal({
       icon: '🤘',
       name: 'ROCK ON / HORNS',
       rule: 'Index + Pinky extended, Middle + Ring curled',
-      action: 'Toggle SAHI: Switches SAHI sliced high-resolution inference ON / OFF.',
+      action: 'Toggle SAHI Matrix Sliced High-Res Inference',
       badge: 'SAHI',
     },
     {
@@ -84,74 +85,105 @@ export default function HoloGuideModal({
       icon: '🤙',
       name: 'CALL ME / SHAKA',
       rule: 'Thumb + Pinky extended, Middle 3 curled',
-      action: 'Voice Assistant: Activates speech microphone listening.',
+      action: 'Activate Voice Assistant speech microphone',
       badge: 'VOICE',
     },
   ];
 
   return (
-    <div className="holo-modal-backdrop animate-fade-in" onClick={onClose}>
-      <div className="holo-modal-dialog glass-panel animate-slide-down" onClick={(e) => e.stopPropagation()}>
+    <div className="v2-modal-backdrop animate-fade-in" onClick={onClose}>
+      <div className="v2-modal-dialog animate-slide-down" onClick={(e) => e.stopPropagation()}>
+        {/* ── 4 Signature Corner Reticles ── */}
+        <span className="v2-modal-corner corner-tl" />
+        <span className="v2-modal-corner corner-tr" />
+        <span className="v2-modal-corner corner-bl" />
+        <span className="v2-modal-corner corner-br" />
+
+        {/* ── Top Laser Scanning Line ── */}
+        <div className="v2-modal-laser-beam" />
+
         {/* ── Modal Header ── */}
-        <div className="holo-modal-hdr">
-          <div className="holo-modal-title-group">
-            <span className="modal-reactor-icon">🖐️</span>
+        <div className="v2-modal-hdr">
+          <div className="v2-modal-title-wrap">
+            <div className="v2-modal-beacon animate-pulse">⬢</div>
             <div>
-              <h2 className="holo-modal-title">21-LANDMARK GESTURE COMMAND MATRIX</h2>
-              <span className="holo-modal-subtitle">Sub-Millimeter 3D Kinematic Hand Tracking & Real-Time Action Engine</span>
+              <div className="v2-title-row">
+                <h2 className="v2-modal-title">21-LANDMARK GESTURE COMMAND MATRIX</h2>
+                <span className="v2-modal-tag">OPTICAL 3D SENSORS</span>
+              </div>
+              <span className="v2-modal-subtitle">
+                Sub-Millimeter 3D Kinematic Hand Tracking & Real-Time Action Engine
+              </span>
             </div>
           </div>
           <button
-            className="btn-modal-close"
+            className="v2-btn-modal-close"
             onClick={() => { soundFX.playToggle(false); onClose(); }}
+            title="Close Gesture Matrix"
           >
             ✕
           </button>
         </div>
 
         {/* ── Armed Status Alert Banner ── */}
-        <div className={`holo-modal-status-banner ${isGesturesArmed ? 'banner-armed' : 'banner-standby'}`}>
-          <div className="status-banner-left">
-            <span className="status-banner-icon">{isGesturesArmed ? '✅' : '⚠️'}</span>
+        <div className={`v2-modal-banner ${isGesturesArmed ? 'banner-armed' : 'banner-standby'}`}>
+          <div className="v2-banner-left">
+            <span className="v2-banner-icon">{isGesturesArmed ? '⚡' : '⚠️'}</span>
             <div>
-              <span className="status-banner-title">
-                {isGesturesArmed ? '3D GESTURES SYSTEM: ARMED & ACTIVE' : '3D GESTURES SYSTEM: STANDBY (OFF)'}
+              <span className="v2-banner-title">
+                {isGesturesArmed ? '3D GESTURES: ARMED & SENSING' : '3D GESTURES: STANDBY (DISARMED)'}
               </span>
-              <p className="status-banner-desc">
+              <p className="v2-banner-desc">
                 {isGesturesArmed
-                  ? 'Kinematic hand tracking is live. Poses in front of the camera will execute commands.'
-                  : 'Gestures are currently disabled. Click the ARM button below to activate 3D recognition.'}
+                  ? 'Kinematic hand tracking is ACTIVE. Poses detected in front of the lens will execute real-time commands.'
+                  : 'Gestures are currently offline. Click the ARM button below to activate 3D recognition.'}
               </p>
             </div>
           </div>
           <button
-            className={`btn-toggle-arm ${isGesturesArmed ? 'btn-disarm' : 'btn-arm'}`}
+            className={`v2-btn-arm-toggle ${isGesturesArmed ? 'btn-disarm' : 'btn-arm'}`}
             onClick={() => onToggleGestures && onToggleGestures()}
           >
             {isGesturesArmed ? 'DISARM GESTURES' : '⚡ ARM GESTURES'}
           </button>
         </div>
 
-        {/* ── Gesture Grid ── */}
-        <div className="holo-gesture-grid">
+        {/* ── 9 High-Contrast Gesture Command Cards ── */}
+        <div className="v2-gesture-cards-grid">
           {gestures.map((g) => {
             const isCurrent = activeGesture === g.id;
             return (
               <div
                 key={g.id}
-                className={`holo-gesture-card glass-card ${isCurrent ? 'gesture-active-verified' : ''}`}
+                className={`v2-gesture-card ${isCurrent ? 'card-active-verified' : ''}`}
               >
-                <div className="gesture-card-hdr">
-                  <span className="card-gesture-icon">{g.icon}</span>
-                  <span className="badge badge-cyan">{g.badge}</span>
+                {/* Corner reticles for each card */}
+                <span className="card-bracket bracket-tl" />
+                <span className="card-bracket bracket-tr" />
+                <span className="card-bracket bracket-bl" />
+                <span className="card-bracket bracket-br" />
+
+                <div className="card-top-row">
+                  <span className="card-icon">{g.icon}</span>
+                  <span className="v2-card-badge">{g.badge}</span>
                 </div>
-                <h4 className="card-gesture-title">{g.name}</h4>
-                <p className="card-gesture-rule"><strong>Pose:</strong> {g.rule}</p>
-                <p className="card-gesture-action"><strong>Action:</strong> {g.action}</p>
+
+                <h4 className="card-title">{g.name}</h4>
+
+                <div className="card-info-box">
+                  <div className="info-line">
+                    <span className="lbl-pose">POSE:</span>
+                    <span className="val-pose">{g.rule}</span>
+                  </div>
+                  <div className="info-line">
+                    <span className="lbl-act">ACTION:</span>
+                    <span className="val-act">{g.action}</span>
+                  </div>
+                </div>
 
                 {isCurrent && (
-                  <div className="card-live-indicator animate-pulse">
-                    ● POSE VERIFIED & ACTIVE
+                  <div className="card-live-pill animate-pulse">
+                    ● POSE VERIFIED & EXECUTING
                   </div>
                 )}
               </div>
@@ -160,15 +192,15 @@ export default function HoloGuideModal({
         </div>
 
         {/* ── Modal Footer ── */}
-        <div className="holo-modal-ftr">
-          <span className="modal-hint-text">
+        <div className="v2-modal-ftr">
+          <span className="v2-ftr-hint">
             💡 Perform gestures in front of the camera to execute real-time actions and trigger HUD notifications.
           </span>
           <button
-            className="btn-holo-confirm"
+            className="v2-btn-confirm"
             onClick={() => { soundFX.playToggle(true); onClose(); }}
           >
-            CONFIRM & RETURN
+            CONFIRM & RETURN TO COCKPIT ➔
           </button>
         </div>
       </div>

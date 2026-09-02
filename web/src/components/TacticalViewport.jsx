@@ -1,16 +1,21 @@
 import { useRef, useEffect, useState } from 'react';
 import { soundFX } from '../utils/audioFx';
+import HudFrame from './hud/HudFrame';
+import HudGrid from './hud/HudGrid';
 
 /**
- * TacticalViewport — Centerpiece Vision Perception screen with holographic corner HUD brackets,
- * scanline shaders, live 3D gesture ring hologram, real-time status banners, and target reticles.
+ * TacticalViewport — AURA V2 Hero Camera Viewport (75-85% Presence)
+ * Cinematic aerospace sensor feed with signature corner reticles,
+ * perspective grid overlay (3-8%), multi-stage target locking reticle,
+ * and machine vision perception badges.
  */
 export default function TacticalViewport({
   frame,
   telemetry,
   scene,
   activeToast,
-  onInspect,
+  filterMode: propFilterMode,
+  onObjectClick,
   onOpenGuide,
   onToggleGestures,
   onSetTargetFilter,
@@ -29,9 +34,9 @@ export default function TacticalViewport({
   const isFrozen = telemetry?.gesture_mode === 'FROZEN';
   const activeGesture = telemetry?.active_gesture || 'none';
   const pointedTarget = telemetry?.pointed_target;
-  const filterMode = telemetry?.target_filter_mode || 'ALL';
+  const filterMode = propFilterMode || telemetry?.target_filter_mode || 'ALL';
 
-  // Trigger sound and flash on snapshot toast
+  // Sound and flash triggers
   useEffect(() => {
     if (activeToast && activeToast !== prevToastRef.current) {
       prevToastRef.current = activeToast;
@@ -39,7 +44,7 @@ export default function TacticalViewport({
         soundFX.playShutter();
         setIsFlashing(true);
         setTimeout(() => setIsFlashing(false), 350);
-      } else if (activeToast.includes('LOCKED')) {
+      } else if (activeToast.includes('LOCKED') || activeToast.includes('INSPECT')) {
         soundFX.playLockOn();
       } else if (activeToast.includes('VOICE')) {
         soundFX.playVoiceChime();
@@ -57,9 +62,11 @@ export default function TacticalViewport({
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      setCanvasSize({ w: img.width, h: img.height });
+      if (canvas.width !== img.width || canvas.height !== img.height) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        setCanvasSize({ w: img.width, h: img.height });
+      }
       ctx.drawImage(img, 0, 0);
     };
     img.src = `data:image/jpeg;base64,${frame}`;
@@ -117,193 +124,171 @@ export default function TacticalViewport({
   };
 
   return (
-    <div className={`tactical-viewport glass-panel ${isFrozen ? 'viewport-frozen' : ''}`}>
-      {/* ── Top Viewport Bar ── */}
-      <div className="viewport-header">
-        <div className="viewport-title-left">
-          <span className="crosshair-icon">✛</span>
-          <span className="viewport-label">TACTICAL PRIMARY SENSOR FEED</span>
-          <span className="viewport-coords">CAM_01 // 640×480 @ 60FPS</span>
-        </div>
-        <div className="viewport-title-right">
-          {/* Quick Perception Mode Chips (4 Modes: Omni View, Objects Only, Humans Only, Muted Off) */}
-          <div className="viewport-filter-chips">
-            <button
-              className={`chip-filter ${filterMode === 'ALL' ? 'chip-active' : ''}`}
-              onClick={() => onSetTargetFilter && onSetTargetFilter('ALL')}
-              title="Omni Perception: Both Physical Objects and Biological Humans"
-            >
-              🌐 OMNI VIEW
-            </button>
-            <button
-              className={`chip-filter ${filterMode === 'OBJECTS_ONLY' ? 'chip-active' : ''}`}
-              onClick={() => onSetTargetFilter && onSetTargetFilter('OBJECTS_ONLY')}
-              title="Perceive Inanimate Objects Only (No Humans, Faces or Skeletons)"
-            >
-              📦 OBJECTS ONLY
-            </button>
-            <button
-              className={`chip-filter ${filterMode === 'HUMANS_ONLY' ? 'chip-active' : ''}`}
-              onClick={() => onSetTargetFilter && onSetTargetFilter('HUMANS_ONLY')}
-              title="Perceive Biological Humans & Faces Only"
-            >
-              👤 HUMANS ONLY
-            </button>
-            <button
-              className={`chip-filter ${filterMode === 'OFF' ? 'chip-active-red' : ''}`}
-              onClick={() => onSetTargetFilter && onSetTargetFilter('OFF')}
-              title="Mute Perception (No detections)"
-            >
-              🛑 MUTED
-            </button>
+    <div className={`tactical-viewport-v2-container ${isFrozen ? 'viewport-frozen' : ''}`}>
+      <HudFrame
+        sensorId="OPTICAL_CAM_01"
+        coords="AZ: 042.8° // ELEV: -12.4°"
+        status={filterMode === 'OFF' ? 'MUTED' : 'PERCEPTION ACTIVE'}
+        showScanline={true}
+        className="tactical-viewport-hud-frame"
+      >
+        {/* ── Layer 5: Perspective Depth Grid (3–8% Opacity) ── */}
+        <HudGrid opacity={0.06} />
+
+        {/* ── Top Floating Sensor Telemetry Bar ── */}
+        <div className="v2-viewport-header">
+          <div className="v2-title-left">
+            <span className="v2-beacon-dot animate-pulse" />
+            <span className="v2-viewport-label">PRIMARY SENSOR HUD</span>
+            <span className="v2-viewport-meta">YOLO-WORLDv2 // 640×480 @ {Math.round(telemetry?.fps || 30)} FPS</span>
           </div>
 
-          {isSAHI && <span className="tag-sahi">🤘 SAHI SLICED</span>}
-          {scene && <span className="tag-count">{filterMode === 'OFF' ? 0 : (scene.entity_count || 0)} TARGETS</span>}
-        </div>
-      </div>
+          <div className="v2-title-right">
+            {/* Quick 4-Mode Perception Filter Chips */}
+            <div className="v2-filter-chips">
+              <button
+                className={`v2-chip ${filterMode === 'ALL' ? 'v2-chip-active-cyan' : ''}`}
+                onClick={() => onSetTargetFilter && onSetTargetFilter('ALL')}
+                title="Omni Perception: Physical Objects & Biological Humans"
+              >
+                🌐 OMNI
+              </button>
+              <button
+                className={`v2-chip ${filterMode === 'OBJECTS_ONLY' ? 'v2-chip-active-cyan' : ''}`}
+                onClick={() => onSetTargetFilter && onSetTargetFilter('OBJECTS_ONLY')}
+                title="Objects Only: Suppress Humans, Faces & Hand Skeletons"
+              >
+                📦 OBJECTS
+              </button>
+              <button
+                className={`v2-chip ${filterMode === 'HUMANS_ONLY' ? 'v2-chip-active-cyan' : ''}`}
+                onClick={() => onSetTargetFilter && onSetTargetFilter('HUMANS_ONLY')}
+                title="Humans Only: Pure Biometric Focus"
+              >
+                👤 HUMANS
+              </button>
+              <button
+                className={`v2-chip ${filterMode === 'OFF' ? 'v2-chip-active-red' : ''}`}
+                onClick={() => onSetTargetFilter && onSetTargetFilter('OFF')}
+                title="Mute Perception"
+              >
+                🛑 OFF
+              </button>
+            </div>
 
-      {/* ── Viewport Canvas Display ── */}
-      <div className="viewport-display">
-        {/* Holographic Corner Brackets */}
-        <div className="hud-corner hud-corner-tl" />
-        <div className="hud-corner hud-corner-tr" />
-        <div className="hud-corner hud-corner-bl" />
-        <div className="hud-corner hud-corner-br" />
-
-        {/* Scanlines and Vignette */}
-        <div className="scanline-layer" />
-        <div className="vignette-layer" />
-
-        {/* Snapshot Flash Overlay */}
-        {isFlashing && <div className="snapshot-flash-screen" />}
-
-        {/* Dynamic Action Toast Banner */}
-        {activeToast && (
-          <div className="holo-action-toast animate-slide-down">
-            <span className="toast-glow-icon">⚡</span>
-            <span>{activeToast}</span>
+            {isSAHI && <span className="v2-tag-sahi">🤘 SAHI</span>}
+            <span className="v2-tag-count">
+              {filterMode === 'OFF' ? '0 TARGETS' : `${scene?.entity_count || 0} TARGETS`}
+            </span>
           </div>
-        )}
-
-        {/* Dynamic State Overlay Banners */}
-        <div className="viewport-status-stack">
-          {filterMode === 'OFF' && (
-            <div className="holo-state-pill pill-off animate-slide-in">
-              <span>🛑 PERCEPTION MUTED (OFF)</span>
-            </div>
-          )}
-
-          {!isGestures && (
-            <div
-              className="holo-state-pill pill-standby animate-slide-in cursor-pointer"
-              onClick={() => onToggleGestures && onToggleGestures()}
-              title="Click to Arm 3D Hand Gestures"
-            >
-              <span>🖐️ GESTURES STANDBY (CLICK TO ARM)</span>
-            </div>
-          )}
-
-          {isSAHI && (
-            <div className="holo-state-pill pill-sahi animate-slide-in">
-              <span className="pill-pulse-dot dot-emerald"></span>
-              <span>🤘 SAHI HIGH-RES MATRIX ACTIVE</span>
-            </div>
-          )}
-
-          {isVoice && (
-            <div className="holo-state-pill pill-voice animate-slide-in">
-              <span className="pill-pulse-dot dot-cyan"></span>
-              <span>🤙 NEURAL VOICE LISTENING...</span>
-            </div>
-          )}
-
-          {isClean && (
-            <div className="holo-state-pill pill-clean animate-slide-in">
-              <span>🖐️ CLEAN VIEW ACTIVATED</span>
-            </div>
-          )}
-
-          {isFrozen && (
-            <div className="holo-state-pill pill-frozen animate-slide-in">
-              <span>❄️ OVERLAY FROZEN</span>
-            </div>
-          )}
-
-          {pointedTarget && (
-            <div className="holo-state-pill pill-target animate-slide-in">
-              <span className="pill-pulse-dot dot-cyan"></span>
-              <span>👉 LOCKED TARGET: {pointedTarget.toUpperCase()}</span>
-            </div>
-          )}
         </div>
 
-        {/* Main Stream Canvas */}
-        {frame ? (
-          <canvas
-            ref={canvasRef}
-            className="viewport-canvas"
-            onClick={handleCanvasClick}
-            onMouseMove={handleCanvasMove}
-            onMouseLeave={() => setHoveredEntity(null)}
-          />
-        ) : (
-          <div className="viewport-loading-state">
-            <div className="loading-radar-ring animate-pulse">⬢</div>
-            <p className="loading-text">SYNCHRONIZING NEURAL SENSOR FEED...</p>
-          </div>
-        )}
+        {/* ── Hero Camera Sensor Stream Canvas ── */}
+        <div className="v2-viewport-canvas-wrapper">
+          {/* Shutter snapshot flash */}
+          {isFlashing && <div className="snapshot-flash-screen" />}
 
-        {/* Floating 3D Gesture Hologram Pill (Bottom Left) */}
-        <div className="holo-gesture-dock">
-          {isGestures ? (
-            <div className={`holo-gesture-ring ${activeGesture !== 'none' ? 'ring-active' : ''}`}>
-              <span className="gesture-holo-icon">{gestureIcons[activeGesture] || '✋'}</span>
-              <div className="gesture-holo-meta">
-                <span className="gesture-holo-name">
-                  {activeGesture === 'none' ? 'AWAITING GESTURE' : activeGesture.replace('_', ' ').toUpperCase()}
-                </span>
-                <span className="gesture-holo-sub">ARMED // 21-LANDMARK 3D</span>
+          {/* Action HUD Toast Alert Banner */}
+          {activeToast && (
+            <div className="v2-holo-action-toast animate-slide-down">
+              <span className="toast-glow-icon">⚡</span>
+              <span>{activeToast}</span>
+            </div>
+          )}
+
+          {/* Dynamic Status Stack Pills */}
+          <div className="v2-status-pill-stack">
+            {filterMode === 'OFF' && (
+              <div className="v2-pill v2-pill-red animate-slide-in">
+                <span>🛑 PERCEPTION MUTED</span>
               </div>
-            </div>
-          ) : (
-            <div
-              className="holo-gesture-ring ring-standby cursor-pointer"
-              onClick={() => onToggleGestures && onToggleGestures()}
-              title="Click to Arm 3D Hand Gestures"
-            >
-              <span className="gesture-holo-icon">🖐️</span>
-              <div className="gesture-holo-meta">
-                <span className="gesture-holo-name">GESTURES STANDBY</span>
-                <span className="gesture-holo-sub">CLICK TO ARM</span>
-              </div>
-            </div>
-          )}
-
-          <button
-            className="btn-holo-manual"
-            onClick={() => {
-              soundFX.playToggle(true);
-              onOpenGuide();
-            }}
-            title="Open Gesture Guide"
-          >
-            📖 Manual
-          </button>
-        </div>
-
-        {/* Hover Tooltip */}
-        {hoveredEntity && (
-          <div className="holo-entity-tooltip animate-fade-in">
-            <span className="tooltip-tag">{hoveredEntity.class_name.toUpperCase()}</span>
-            {hoveredEntity.track_id != null && (
-              <span className="tooltip-id">#ID {hoveredEntity.track_id}</span>
             )}
-            <span className="tooltip-conf">{Math.round((hoveredEntity.confidence || 0.9) * 100)}% Match</span>
-            <span className="tooltip-action">Click / Pinch 👌 to Inspect</span>
+
+            {!isGestures && (
+              <div
+                className="v2-pill v2-pill-amber animate-slide-in cursor-pointer"
+                onClick={() => onToggleGestures && onToggleGestures()}
+                title="Click to Arm 3D Hand Gestures"
+              >
+                <span>🖐️ GESTURES STANDBY (CLICK TO ARM)</span>
+              </div>
+            )}
+
+            {isSAHI && (
+              <div className="v2-pill v2-pill-emerald animate-slide-in">
+                <span className="v2-pulse-dot dot-emerald" />
+                <span>🤘 SAHI HIGH-RES MATRIX</span>
+              </div>
+            )}
+
+            {isVoice && (
+              <div className="v2-pill v2-pill-cyan animate-slide-in">
+                <span className="v2-pulse-dot dot-cyan" />
+                <span>🤙 NEURAL VOICE LISTENING...</span>
+              </div>
+            )}
+
+            {isClean && (
+              <div className="v2-pill v2-pill-cyan animate-slide-in">
+                <span>🖐️ CLEAN VIEW ACTIVATED</span>
+              </div>
+            )}
+
+            {isFrozen && (
+              <div className="v2-pill v2-pill-cyan animate-slide-in">
+                <span>❄️ OVERLAY FROZEN</span>
+              </div>
+            )}
+
+            {pointedTarget && (
+              <div className="v2-pill v2-pill-target animate-slide-in">
+                <span className="v2-pulse-dot dot-amber" />
+                <span>🎯 TARGET LOCKED: {pointedTarget.toUpperCase()}</span>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Main Video Stream Canvas */}
+          {frame ? (
+            <canvas
+              ref={canvasRef}
+              className="v2-viewport-canvas"
+              onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMove}
+              onMouseLeave={() => setHoveredEntity(null)}
+            />
+          ) : (
+            <div className="v2-viewport-loading-state">
+              <div className="v2-loading-ring animate-pulse">⬢</div>
+              <p className="v2-loading-text">SYNCHRONIZING SENSOR STREAM...</p>
+            </div>
+          )}
+
+          {/* ── Target Lock Multi-Stage Overlay (When Target is Pointed/Locked) ── */}
+          {pointedTarget && (
+            <div className="v2-target-lock-indicator animate-pulse">
+              <div className="lock-crosshair-ring" />
+              <div className="lock-target-label">
+                <span className="lock-sub">TARGET ACQUIRED</span>
+                <span className="lock-name">{pointedTarget.toUpperCase()}</span>
+                <span className="lock-status">TRACKED // READY TO PINCH 👌</span>
+              </div>
+            </div>
+          )}
+
+          {/* Hover Tooltip Overlay */}
+          {hoveredEntity && (
+            <div className="v2-entity-tooltip animate-fade-in">
+              <span className="v2-tooltip-tag">{hoveredEntity.class_name.toUpperCase()}</span>
+              {hoveredEntity.track_id != null && (
+                <span className="v2-tooltip-id">#ID {hoveredEntity.track_id}</span>
+              )}
+              <span className="v2-tooltip-conf">{Math.round((hoveredEntity.confidence || 0.9) * 100)}% Match</span>
+              <span className="v2-tooltip-action">Click / Pinch 👌 to Inspect</span>
+            </div>
+          )}
+        </div>
+      </HudFrame>
     </div>
   );
 }

@@ -2,8 +2,14 @@
 Unit tests for AURA ObjectDetector and Detection structured schemas.
 """
 
+import os
+import sys
 import unittest
 import numpy as np
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from vision.detector import (
     Detection,
     ObjectDetector,

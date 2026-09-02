@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { soundFX } from '../utils/audioFx';
 
 /**
- * TacticalDeck — Auto-popping bottom tactical control matrix.
- * Collapses into a sleek holographic dock bar and pops up instantly on hover or click.
+ * TacticalDeck — AURA V2 Holographic Aerospace Command Dock.
+ * Collapsed into a sleek, floating command pill.
+ * Pops up into 6 aerospace control pods with radial rings and system LEDs.
  */
 export default function TacticalDeck({
   telemetry,
@@ -22,16 +23,13 @@ export default function TacticalDeck({
   const isGestures = telemetry?.gestures_enabled ?? false;
   const isVoice = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
 
-  // Optimistic local state for instantaneous click responsiveness
   const [localFilterMode, setLocalFilterMode] = useState(
     propFilterMode || telemetry?.target_filter_mode || 'ALL'
   );
 
-  // Auto-pop & collapse state
   const [isExpanded, setIsExpanded] = useState(false);
   const hoverTimeoutRef = useRef(null);
 
-  // Sync with incoming telemetry / prop updates
   useEffect(() => {
     if (telemetry?.target_filter_mode) {
       setLocalFilterMode(telemetry.target_filter_mode);
@@ -52,7 +50,7 @@ export default function TacticalDeck({
   const handleMouseLeave = () => {
     hoverTimeoutRef.current = setTimeout(() => {
       setIsExpanded(false);
-    }, 450); // smooth 450ms grace period
+    }, 450);
   };
 
   const handleToggleExpand = (e) => {
@@ -61,45 +59,14 @@ export default function TacticalDeck({
     setIsExpanded((prev) => !prev);
   };
 
-  const handleSAHI = (e) => {
-    e?.stopPropagation();
-    soundFX.playToggle(!isSAHI);
-    if (onToggleSAHI) onToggleSAHI();
-  };
-
-  const handleTracking = (e) => {
-    e?.stopPropagation();
-    soundFX.playToggle(!isTracking);
-    if (onToggleTracking) onToggleTracking();
-  };
-
-  const handleOCR = (e) => {
-    e?.stopPropagation();
-    soundFX.playToggle(!isOCR);
-    if (onToggleOCR) onToggleOCR();
-  };
-
-  const handleVoice = (e) => {
-    e?.stopPropagation();
-    soundFX.playToggle(!isVoice);
-    if (onToggleVoice) onToggleVoice();
-  };
-
-  const handleGestures = (e) => {
-    e?.stopPropagation();
-    soundFX.playToggle(!isGestures);
-    if (onToggleGestures) onToggleGestures();
-  };
-
   const handleFilter = (e) => {
     e?.stopPropagation();
     soundFX.playClick();
     const cycleOrder = ['ALL', 'OBJECTS_ONLY', 'HUMANS_ONLY', 'OFF'];
     const currentIdx = cycleOrder.indexOf(localFilterMode);
     const nextMode = cycleOrder[(currentIdx + 1) % cycleOrder.length];
-    
-    setLocalFilterMode(nextMode);
 
+    setLocalFilterMode(nextMode);
     if (onSetTargetFilter) {
       onSetTargetFilter(nextMode);
     } else if (onCycleTargetFilter) {
@@ -115,9 +82,9 @@ export default function TacticalDeck({
   };
 
   const getFilterLabel = () => {
-    if (localFilterMode === 'OBJECTS_ONLY') return 'OBJECTS ONLY';
-    if (localFilterMode === 'HUMANS_ONLY') return 'HUMANS ONLY';
-    if (localFilterMode === 'OFF') return 'MUTED (OFF)';
+    if (localFilterMode === 'OBJECTS_ONLY') return 'OBJECTS';
+    if (localFilterMode === 'HUMANS_ONLY') return 'HUMANS';
+    if (localFilterMode === 'OFF') return 'MUTED';
     return 'OMNI VIEW';
   };
 
@@ -125,136 +92,142 @@ export default function TacticalDeck({
 
   return (
     <div
-      className={`tactical-floating-dock-container ${isExpanded ? 'dock-expanded' : 'dock-collapsed'}`}
+      className={`v2-command-dock-container ${isExpanded ? 'v2-dock-open' : 'v2-dock-closed'}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* ── 1. Holographic Collapsed Trigger Bar ── */}
+      {/* ── 1. Collapsed Floating Trigger Bar ── */}
       <div
-        className="dock-trigger-tab glass-panel"
+        className="v2-dock-trigger-tab"
         onClick={handleToggleExpand}
-        title={isExpanded ? 'Click to minimize dock' : 'Hover or click to open tactical control deck'}
+        title={isExpanded ? 'Click to minimize dock' : 'Hover or click to open command matrix'}
       >
-        <div className="dock-tab-glow-indicator animate-pulse" />
-        <span className="dock-tab-icon">⚡</span>
-        <span className="dock-tab-title">TACTICAL COMMAND DOCK</span>
-        
-        {/* Live Mini LED Status Indicators */}
-        <div className="dock-tab-mini-chips">
-          <span className={`dock-mini-dot ${isPerceptionActive ? 'dot-cyan' : 'dot-off'}`} title={`Perception: ${getFilterLabel()}`} />
-          <span className={`dock-mini-dot ${isGestures ? 'dot-emerald' : 'dot-off'}`} title={`Gestures: ${isGestures ? 'ARMED' : 'STANDBY'}`} />
-          <span className={`dock-mini-dot ${isTracking ? 'dot-cyan' : 'dot-off'}`} title={`Tracking: ${isTracking ? 'ON' : 'OFF'}`} />
-          <span className={`dock-mini-dot ${isOCR ? 'dot-cyan' : 'dot-off'}`} title={`OCR: ${isOCR ? 'ON' : 'OFF'}`} />
+        <span className="v2-dock-core-dot animate-pulse" />
+        <span className="v2-dock-trigger-title">⚡ AURA COMMAND ORBIT</span>
+
+        {/* Live Mini Subsystem LEDs */}
+        <div className="v2-dock-mini-leds">
+          <span className={`mini-led ${isPerceptionActive ? 'led-cyan' : 'led-off'}`} title="Perception" />
+          <span className={`mini-led ${isGestures ? 'led-emerald' : 'led-off'}`} title="Gestures" />
+          <span className={`mini-led ${isSAHI ? 'led-emerald' : 'led-off'}`} title="SAHI" />
+          <span className={`mini-led ${isTracking ? 'led-cyan' : 'led-off'}`} title="Tracking" />
+          <span className={`mini-led ${isOCR ? 'led-cyan' : 'led-off'}`} title="OCR" />
+          <span className={`mini-led ${isVoice ? 'led-emerald' : 'led-off'}`} title="Voice" />
         </div>
 
-        <span className="dock-expand-arrow">{isExpanded ? '▼' : '▲'}</span>
+        <span className="v2-dock-arrow">{isExpanded ? '▼' : '▲'}</span>
       </div>
 
-      {/* ── 2. Pop-up Tactical Deck Panel ── */}
-      <div className="tactical-deck-content glass-panel">
-        <div className="deck-wrapper">
-          {/* Left Status & Core Metrics */}
-          <div className="deck-core-telemetry">
-            <div className="deck-telemetry-item">
-              <span className="deck-lbl">SYSTEM STATUS</span>
-              <span className="deck-val val-emerald">ONLINE // NOMINAL</span>
+      {/* ── 2. Expanded Aerospace Control Pods ── */}
+      <div className="v2-dock-panel">
+        <div className="v2-pods-grid">
+          {/* Pod 1: Perception Filter */}
+          <div
+            className={`v2-control-pod ${isPerceptionActive ? 'pod-active' : 'pod-off'}`}
+            onClick={handleFilter}
+            title="Cycle Perception: Omni View ➔ Objects Only ➔ Humans Only ➔ Muted"
+          >
+            <div className="pod-radial-ring ring-cyan">
+              <span className="pod-icon">{getFilterIcon()}</span>
             </div>
-            <div className="deck-telemetry-item">
-              <span className="deck-lbl">AI CORE</span>
-              <span className="deck-val val-cyan">YOLO-World + MediaPipe 3D</span>
-            </div>
-            <div className="deck-telemetry-item">
-              <span className="deck-lbl">TRACKS</span>
-              <span className="deck-val">{telemetry?.active_tracks || 0} ACTIVE</span>
+            <div className="pod-meta">
+              <span className="pod-title">PERCEPTION</span>
+              <span className="pod-status">{getFilterLabel()}</span>
             </div>
           </div>
 
-          <div className="deck-vertical-divider" />
-
-          {/* Right Interactive Tactical Switches */}
-          <div className="deck-switches-matrix">
-            {/* Perception Filter Switch (4 Functions: Omni View -> Objects Only -> Humans Only -> Muted Off) */}
-            <div
-              className={`tactical-switch-card ${isPerceptionActive ? 'switch-card-active' : 'switch-card-off'}`}
-              onClick={handleFilter}
-              title="Cycle Perception: Omni View ➔ Objects Only ➔ Humans Only ➔ Muted (Off)"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">{getFilterIcon()}</span>
-                <span className={`switch-led ${isPerceptionActive ? 'led-active-cyan' : ''}`} />
-              </div>
-              <span className="switch-title">PERCEPTION</span>
-              <span className="switch-status-text">{getFilterLabel()}</span>
+          {/* Pod 2: 3D Hand Gestures */}
+          <div
+            className={`v2-control-pod ${isGestures ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isGestures);
+              if (onToggleGestures) onToggleGestures();
+            }}
+            title="Arm / Disarm 3D Hand Gestures (MediaPipe 21 Landmarks)"
+          >
+            <div className="pod-radial-ring ring-emerald">
+              <span className="pod-icon">🖐️</span>
             </div>
-
-            {/* 3D Gestures Master Armed Switch */}
-            <div
-              className={`tactical-switch-card ${isGestures ? 'switch-card-active' : ''}`}
-              onClick={handleGestures}
-              title="Arm / Disarm 3D Hand Gestures (Raycast, Air-Click Pinch & Skeleton)"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">🖐️</span>
-                <span className={`switch-led ${isGestures ? 'led-active-emerald' : ''}`} />
-              </div>
-              <span className="switch-title">3D GESTURES</span>
-              <span className="switch-status-text">{isGestures ? 'ARMED' : 'STANDBY'}</span>
+            <div className="pod-meta">
+              <span className="pod-title">3D GESTURES</span>
+              <span className="pod-status">{isGestures ? 'ARMED' : 'STANDBY'}</span>
             </div>
+          </div>
 
-            {/* SAHI Switch */}
-            <div
-              className={`tactical-switch-card ${isSAHI ? 'switch-card-active' : ''}`}
-              onClick={handleSAHI}
-              title="Toggle SAHI Sliced High-Res Inference (Gesture: 🤘 Rock On)"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">🤘</span>
-                <span className={`switch-led ${isSAHI ? 'led-active-emerald' : ''}`} />
-              </div>
-              <span className="switch-title">SAHI MATRIX</span>
-              <span className="switch-status-text">{isSAHI ? 'ENABLED' : 'DISABLED'}</span>
+          {/* Pod 3: SAHI Matrix */}
+          <div
+            className={`v2-control-pod ${isSAHI ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isSAHI);
+              if (onToggleSAHI) onToggleSAHI();
+            }}
+            title="Toggle SAHI Sliced High-Res Inference"
+          >
+            <div className="pod-radial-ring ring-emerald">
+              <span className="pod-icon">🤘</span>
             </div>
-
-            {/* Tracking Switch */}
-            <div
-              className={`tactical-switch-card ${isTracking ? 'switch-card-active' : ''}`}
-              onClick={handleTracking}
-              title="Toggle Spatial Object Tracking (Hides Left Matrix When Off)"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">🎯</span>
-                <span className={`switch-led ${isTracking ? 'led-active-cyan' : ''}`} />
-              </div>
-              <span className="switch-title">SPATIAL TRACKER</span>
-              <span className="switch-status-text">{isTracking ? 'TRACKING' : 'OFF'}</span>
+            <div className="pod-meta">
+              <span className="pod-title">SAHI MATRIX</span>
+              <span className="pod-status">{isSAHI ? 'SLICING' : 'OFF'}</span>
             </div>
+          </div>
 
-            {/* OCR Scanner Switch */}
-            <div
-              className={`tactical-switch-card ${isOCR ? 'switch-card-active' : ''}`}
-              onClick={handleOCR}
-              title="Toggle Asynchronous Text Scanner"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">🔍</span>
-                <span className={`switch-led ${isOCR ? 'led-active-cyan' : ''}`} />
-              </div>
-              <span className="switch-title">OCR SCANNER</span>
-              <span className="switch-status-text">{isOCR ? 'ACTIVE' : 'MUTED'}</span>
+          {/* Pod 4: Spatial Tracker */}
+          <div
+            className={`v2-control-pod ${isTracking ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isTracking);
+              if (onToggleTracking) onToggleTracking();
+            }}
+            title="Toggle Spatial Tracking (Auto-hides Radar when OFF)"
+          >
+            <div className="pod-radial-ring ring-cyan">
+              <span className="pod-icon">🎯</span>
             </div>
+            <div className="pod-meta">
+              <span className="pod-title">SPATIAL TRACKER</span>
+              <span className="pod-status">{isTracking ? 'TRACKING' : 'MUTED'}</span>
+            </div>
+          </div>
 
-            {/* Voice Assistant Switch */}
-            <div
-              className={`tactical-switch-card ${isVoice ? 'switch-card-active' : ''}`}
-              onClick={handleVoice}
-              title="Toggle Voice Assistant (Gesture: 🤙 Call Me)"
-            >
-              <div className="switch-top">
-                <span className="switch-icon">🤙</span>
-                <span className={`switch-led ${isVoice ? 'led-active-emerald' : ''}`} />
-              </div>
-              <span className="switch-title">NEURAL VOICE</span>
-              <span className="switch-status-text">{isVoice ? 'LISTENING' : 'STANDBY'}</span>
+          {/* Pod 5: OCR Scanner */}
+          <div
+            className={`v2-control-pod ${isOCR ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isOCR);
+              if (onToggleOCR) onToggleOCR();
+            }}
+            title="Toggle Machine Vision OCR Text Scanner"
+          >
+            <div className="pod-radial-ring ring-cyan">
+              <span className="pod-icon">🔍</span>
+            </div>
+            <div className="pod-meta">
+              <span className="pod-title">OCR SCANNER</span>
+              <span className="pod-status">{isOCR ? 'SCANNING' : 'MUTED'}</span>
+            </div>
+          </div>
+
+          {/* Pod 6: Neural Voice */}
+          <div
+            className={`v2-control-pod ${isVoice ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isVoice);
+              if (onToggleVoice) onToggleVoice();
+            }}
+            title="Toggle Voice Assistant (Call Me 🤙 Gesture)"
+          >
+            <div className="pod-radial-ring ring-emerald">
+              <span className="pod-icon">🤙</span>
+            </div>
+            <div className="pod-meta">
+              <span className="pod-title">NEURAL VOICE</span>
+              <span className="pod-status">{isVoice ? 'LISTENING' : 'STANDBY'}</span>
             </div>
           </div>
         </div>

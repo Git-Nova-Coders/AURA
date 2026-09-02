@@ -1,23 +1,55 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
 venv/
 .venv/
 env/
+ENV/
 
-# Environment variables
+# Environment variables & secrets
 .env
+.env.*
+!.env.example
 
 # Jupyter
 .ipynb_checkpoints/
 
-# IDE
+# IDE & OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
 
-# ML files
+# Testing & Quality
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ML Models & Checkpoints
 *.pt
 *.pth
 *.onnx
@@ -31,13 +63,22 @@ data/processed/
 
 # Logs & Captures
 logs/
+*.log
 captures/
 aura_capture_*.jpg
+aura_snapshot_*.jpg
 *.avi
+*.mp4
 *.db
 data/*.db
 
-# Node
+# Node / Web Frontend
 node_modules/
 web/node_modules/
+web/dist/
+web/dist-ssr/
+.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 

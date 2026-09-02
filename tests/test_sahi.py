@@ -3,8 +3,13 @@ Unit tests for AURA SAHI (Slicing Aided Hyper Inference) Subsystem.
 Tests slice window calculation, tile generation, NMS box fusion, and end-to-end sliced inference.
 """
 
+import os
+import sys
 import unittest
 import numpy as np
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import SAHIConfig
 from vision.detector import Detection, ObjectDetector
@@ -117,6 +122,30 @@ class TestSAHISubsystem(unittest.TestCase):
         self.assertIsNone(detector._sahi_engine)
         detector.enable_sahi(config)
         self.assertIsNotNone(detector._sahi_engine)
+
+    def test_person_sub_slice_fragments_not_duplicated(self):
+        """Verify that slicing does not duplicate a single sitting person into 4 persons."""
+        config = SAHIConfig(enabled=True, slice_width=320, slice_height=320, include_full_frame=True)
+        engine = SlicedInferenceEngine(config)
+
+        # Full-frame person: [100, 50, 500, 480]
+        # And sub-slice fragments of the same person:
+        full_person = Detection(class_id=0, class_name="person", confidence=0.88, bbox=[100.0, 50.0, 500.0, 480.0])
+        slice_head = Detection(class_id=0, class_name="person", confidence=0.92, bbox=[150.0, 60.0, 310.0, 280.0])
+        slice_torso = Detection(class_id=0, class_name="person", confidence=0.85, bbox=[120.0, 200.0, 480.0, 480.0])
+        # Plus an actual small object detected in a slice (e.g. glasses)
+        slice_glasses = Detection(class_id=60, class_name="glasses", confidence=0.78, bbox=[200.0, 140.0, 280.0, 180.0])
+
+        fused = apply_nms_merging([full_person, slice_head, slice_torso, slice_glasses], iou_threshold=0.5, match_class=True)
+        persons = [d for d in fused if d.class_name == "person"]
+        glasses = [d for d in fused if d.class_name == "glasses"]
+
+        # Exactly 1 person should remain, and glasses should be preserved
+        self.assertEqual(len(persons), 1)
+        self.assertEqual(len(glasses), 1)
+        # Person bounding box should retain full body coverage
+        self.assertLessEqual(persons[0].bbox[0], 120.0)
+        self.assertGreaterEqual(persons[0].bbox[3], 450.0)
 
 
 if __name__ == "__main__":
