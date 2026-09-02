@@ -222,54 +222,68 @@ def draw_detections(
         y2 = int(max(0, min(img_h - 1, round(det.y2))))
 
         color = get_class_color(det.class_id)
+        dim_color = (int(color[0] * 0.35), int(color[1] * 0.35), int(color[2] * 0.35))
 
-        # Draw bounding box
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, box_thickness, lineType=cv2.LINE_AA)
+        # 1. Subtle 1px bounding wireframe
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), dim_color, 1, lineType=cv2.LINE_AA)
 
-        # Build label text
+        # 2. Signature Aerospace Corner Brackets
+        bw = max(10, min(24, int((x2 - x1) * 0.22)))
+        bh = max(10, min(24, int((y2 - y1) * 0.22)))
+        thick = max(2, box_thickness)
+
+        # Top-Left Bracket
+        cv2.line(annotated, (x1, y1), (x1 + bw, y1), color, thick, cv2.LINE_AA)
+        cv2.line(annotated, (x1, y1), (x1, y1 + bh), color, thick, cv2.LINE_AA)
+        # Top-Right Bracket
+        cv2.line(annotated, (x2, y1), (x2 - bw, y1), color, thick, cv2.LINE_AA)
+        cv2.line(annotated, (x2, y1), (x2, y1 + bh), color, thick, cv2.LINE_AA)
+        # Bottom-Left Bracket
+        cv2.line(annotated, (x1, y2), (x1 + bw, y2), color, thick, cv2.LINE_AA)
+        cv2.line(annotated, (x1, y2), (x1, y2 - bh), color, thick, cv2.LINE_AA)
+        # Bottom-Right Bracket
+        cv2.line(annotated, (x2, y2), (x2 - bw, y2), color, thick, cv2.LINE_AA)
+        cv2.line(annotated, (x2, y2), (x2, y2 - bh), color, thick, cv2.LINE_AA)
+
+        # Build label text (concise aerospace HUD format: #ID CLASS CONF%)
         parts = []
         if det.track_id is not None:
             parts.append(f"#{det.track_id}")
         if show_labels:
-            parts.append(det.class_name)
+            parts.append(det.class_name.upper())
         if show_conf:
-            parts.append(f"{det.confidence * 100:.1f}%")
-        if det.reliability_label is not None:
-            parts.append(f"({det.reliability_label})")
+            parts.append(f"{int(det.confidence * 100)}%")
 
         if parts:
             label = " ".join(parts)
+            hud_font_scale = 0.42
             (text_w, text_h), baseline = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness
+                label, cv2.FONT_HERSHEY_SIMPLEX, hud_font_scale, 1
             )
             
-            badge_y1 = max(0, y1 - text_h - baseline - 4)
-            badge_y2 = y1 if y1 - text_h - baseline - 4 >= 0 else y1 + text_h + baseline + 4
-            badge_x2 = min(img_w - 1, x1 + text_w + 6)
-            text_baseline_y = y1 - 4 if y1 - text_h - baseline - 4 >= 0 else y1 + text_h + 2
+            badge_y1 = max(0, y1 - text_h - baseline - 6)
+            badge_y2 = y1 if y1 - text_h - baseline - 6 >= 0 else y1 + text_h + baseline + 6
+            badge_x2 = min(img_w - 1, x1 + text_w + 8)
+            text_baseline_y = y1 - 4 if y1 - text_h - baseline - 6 >= 0 else y1 + text_h + 3
 
-            # Background rectangle for text
-            cv2.rectangle(
-                annotated,
-                (x1, badge_y1),
-                (badge_x2, badge_y2),
-                color,
-                cv2.FILLED,
-            )
+            # Semi-transparent dark glass HUD badge
+            if badge_y2 > badge_y1 and badge_x2 > x1:
+                sub_patch = annotated[badge_y1:badge_y2, x1:badge_x2]
+                dark_bg = np.full_like(sub_patch, (8, 14, 24))
+                cv2.addWeighted(sub_patch, 0.25, dark_bg, 0.75, 0, sub_patch)
+                # 1px Top accent line
+                cv2.line(annotated, (x1, badge_y1), (badge_x2, badge_y1), color, 1, cv2.LINE_AA)
 
-            # High contrast text color (black or white)
-            luminance = 0.299 * color[2] + 0.587 * color[1] + 0.114 * color[0]
-            text_color = (0, 0, 0) if luminance > 128 else (255, 255, 255)
-
+            # Crisp HUD text in class accent color
             cv2.putText(
                 annotated,
                 label,
-                (x1 + 3, text_baseline_y),
+                (x1 + 4, text_baseline_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale,
-                text_color,
-                font_thickness,
-                lineType=cv2.LINE_AA,
+                hud_font_scale,
+                color,
+                1,
+                cv2.LINE_AA,
             )
 
     return annotated
