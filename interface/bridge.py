@@ -275,6 +275,7 @@ class AuraBridge:
             on_inspect_callback=self.inspect_target,
             on_toggle_sahi_callback=self.toggle_sahi,
             on_voice_trigger_callback=self.toggle_voice,
+            on_deselect_callback=self.deselect_target,
         )
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
@@ -611,14 +612,6 @@ class AuraBridge:
             ):
                 annotated = draw_hand_skeleton(annotated, active_gesture)
 
-            # Draw Real-Time HUD Action Toast Banner (only if gestures armed)
-            if (
-                self._gestures_enabled
-                and self.gesture_controller.active_toast
-                and time.time() < self.gesture_controller.toast_expiry_time
-            ):
-                annotated = draw_action_toast(annotated, self.gesture_controller.active_toast)
-
             # 10. Encode to JPEG
             _, jpeg_buf = cv2.imencode(
                 ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75],
@@ -812,35 +805,44 @@ class AuraBridge:
         return [d.to_dict() for d in docs]
 
     def toggle_sahi(self) -> bool:
-        """Toggles SAHI on/off and returns new state."""
+        """Toggles SAHI on/off, updates telemetry synchronously, and returns new state."""
         if self.detector.sahi_config and self.detector.sahi_config.enabled:
             self.detector.disable_sahi()
+            new_state = False
             self.gesture_controller.trigger_toast("SAHI DISABLED", duration=1.5)
-            return False
         else:
             self.detector.enable_sahi()
+            new_state = True
             self.gesture_controller.trigger_toast("🤘 SAHI HIGH-RES ENABLED (320px Slices)", duration=2.0)
-            return True
+        with self._lock:
+            self._telemetry.sahi_enabled = new_state
+        return new_state
 
     def toggle_gestures(self) -> bool:
-        """Toggles 3D hand gestures master armed state on/off and returns new state."""
+        """Toggles 3D hand gestures master armed state on/off, updates telemetry, and returns new state."""
         self._gestures_enabled = not self._gestures_enabled
         state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
         self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
+        with self._lock:
+            self._telemetry.gestures_enabled = self._gestures_enabled
         return self._gestures_enabled
 
     def set_gestures(self, enabled: bool) -> bool:
-        """Explicitly sets 3D hand gestures armed state."""
+        """Explicitly sets 3D hand gestures armed state and updates telemetry."""
         self._gestures_enabled = enabled
         state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
         self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
+        with self._lock:
+            self._telemetry.gestures_enabled = self._gestures_enabled
         return self._gestures_enabled
 
     def toggle_tracking(self) -> bool:
-        """Toggles tracking on/off and returns new state."""
+        """Toggles tracking on/off, updates telemetry synchronously, and returns new state."""
         self._tracking_enabled = not self._tracking_enabled
         state_str = "ENABLED" if self._tracking_enabled else "DISABLED"
         self.gesture_controller.trigger_toast(f"TRACKING {state_str}", duration=1.5)
+        with self._lock:
+            self._telemetry.tracking_enabled = self._tracking_enabled
         return self._tracking_enabled
 
     def toggle_ocr(self) -> bool:
@@ -850,6 +852,8 @@ class AuraBridge:
             self._last_ocr_texts = []
         state_str = "ENABLED" if self._ocr_enabled else "DISABLED"
         self.gesture_controller.trigger_toast(f"OCR TEXT SCANNER {state_str}", duration=1.5)
+        with self._lock:
+            self._telemetry.ocr_enabled = self._ocr_enabled
         return self._ocr_enabled
 
     def set_ocr(self, enabled: bool) -> bool:
@@ -857,6 +861,8 @@ class AuraBridge:
         self._ocr_enabled = enabled
         if not self._ocr_enabled:
             self._last_ocr_texts = []
+        with self._lock:
+            self._telemetry.ocr_enabled = self._ocr_enabled
         return self._ocr_enabled
 
     def set_target_filter_mode(self, mode: str) -> str:
@@ -879,6 +885,9 @@ class AuraBridge:
         }
         self.gesture_controller.trigger_toast(toast_labels[self._target_filter_mode], duration=2.0)
         
+        with self._lock:
+            self._telemetry.target_filter_mode = self._target_filter_mode.value
+
         # Broadcast config update event immediately to all WebSockets
         if self._event_broadcaster:
             try:
@@ -907,10 +916,12 @@ class AuraBridge:
         return self.set_target_filter_mode(next_mode.value)
 
     def toggle_voice(self) -> bool:
-        """Toggles Voice Assistant listening mode."""
+        """Toggles Voice Assistant listening mode and updates telemetry."""
         self._voice_listening = not self._voice_listening
         state_str = "LISTENING..." if self._voice_listening else "PAUSED"
         self.gesture_controller.trigger_toast(f"🤙 VOICE ASSISTANT {state_str}", duration=1.8)
+        with self._lock:
+            self._telemetry.voice_listening = self._voice_listening
         return self._voice_listening
 
     def set_event_broadcaster(self, broadcaster: Any) -> None:
@@ -1002,6 +1013,20 @@ class AuraBridge:
                 logger.warning(f"Failed to broadcast inspect response: {e}")
 
         return result
+
+    def deselect_target(self) -> None:
+        """Deselects active target and broadcasts deselect_all event to connected WebSockets."""
+        with self._lock:
+            if self._telemetry:
+                self._telemetry.pointed_target = None
+        if self._event_broadcaster:
+            try:
+                self._event_broadcaster({
+                    "type": "deselect_all",
+                    "data": {},
+                })
+            except Exception as e:
+                logger.debug(f"Deselect broadcast error: {e}")
 
     def get_status(self) -> Dict[str, Any]:
         """Returns overall system status."""
