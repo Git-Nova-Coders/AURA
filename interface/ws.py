@@ -129,6 +129,40 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             "data": {"voice_listening": new_state},
                         }))
 
+                elif msg_type == "toggle_gestures":
+                    if _bridge:
+                        new_state = _bridge.toggle_gestures()
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"gestures_enabled": new_state},
+                        }))
+
+                elif msg_type == "set_gestures":
+                    enabled = bool(msg.get("enabled", False))
+                    if _bridge:
+                        new_state = _bridge.set_gestures(enabled)
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"gestures_enabled": new_state},
+                        }))
+
+                elif msg_type == "set_target_filter":
+                    mode = str(msg.get("mode", "ALL"))
+                    if _bridge:
+                        new_mode = _bridge.set_target_filter_mode(mode)
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"target_filter_mode": new_mode},
+                        }))
+
+                elif msg_type == "cycle_target_filter":
+                    if _bridge:
+                        new_mode = _bridge.cycle_target_filter_mode()
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"target_filter_mode": new_mode},
+                        }))
+
                 elif msg_type == "inspect_entity":
                     query = msg.get("query", "")
                     if _bridge:

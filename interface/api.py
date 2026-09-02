@@ -47,6 +47,9 @@ class MemorySearchRequest(BaseModel):
 class ConfigUpdateRequest(BaseModel):
     sahi_enabled: Optional[bool] = None
     tracking_enabled: Optional[bool] = None
+    ocr_enabled: Optional[bool] = None
+    gestures_enabled: Optional[bool] = None
+    target_filter_mode: Optional[str] = None
 
 
 # ── Endpoints ──
@@ -72,79 +75,77 @@ async def get_scene():
 
 @router.get("/detections")
 async def get_detections():
-    """Returns the latest detection list."""
+    """Returns latest raw detections from current frame."""
     bridge = _get_bridge()
     return {"detections": bridge.get_detections()}
 
 
 @router.post("/chat")
 async def post_chat(request: ChatRequest):
-    """Sends a user query to the conversation engine and returns a grounded response."""
+    """Processes user queries against the multimodal system."""
     bridge = _get_bridge()
-    try:
-        result = bridge.send_chat(request.query)
-        return result
-    except Exception as e:
-        logger.error(f"Chat error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Chat processing error: {str(e)}")
+    return bridge.send_chat(request.query)
 
 
 @router.post("/rag/search")
 async def search_rag(request: RAGSearchRequest):
-    """Searches indexed RAG documents with cosine similarity ranking."""
+    """Performs semantic vector search over manual/spec documents."""
     bridge = _get_bridge()
-    try:
-        result = bridge.search_rag(request.query, top_k=request.top_k)
-        return result
-    except Exception as e:
-        logger.error(f"RAG search error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"RAG search error: {str(e)}")
+    return bridge.search_rag(request.query, top_k=request.top_k)
 
 
 @router.get("/rag/documents")
 async def get_rag_documents():
-    """Lists all indexed RAG documents."""
+    """Lists all indexed RAG documents with chunk counts."""
     bridge = _get_bridge()
-    return {"documents": bridge.get_rag_documents()}
+    if not bridge.rag_engine:
+        return {"documents": [], "total_chunks": 0}
+    return {
+        "documents": [
+            {"doc_id": doc_id, "total_chunks": len(chunks)}
+            for doc_id, chunks in bridge.rag_engine.documents.items()
+        ],
+        "total_chunks": len(bridge.rag_engine.chunks),
+    }
 
 
 @router.post("/memory/search")
 async def search_memory(request: MemorySearchRequest):
-    """Searches episodic memory for when/where an object was last seen."""
+    """Queries episodic memory for object interaction history."""
     bridge = _get_bridge()
-    try:
-        result = bridge.search_memory(request.query)
-        return result
-    except Exception as e:
-        logger.error(f"Memory search error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Memory search error: {str(e)}")
+    return bridge.search_memory(request.query)
 
 
 @router.get("/memory/history")
 async def get_memory_history(limit: int = 20):
-    """Returns the most recent episodic memory events."""
+    """Retrieves recent scene events from episodic memory."""
     bridge = _get_bridge()
-    return {"events": bridge.get_memory_history(limit=min(limit, 50))}
+    if not bridge.episodic_memory:
+        return {"events": [], "count": 0}
+    events = bridge.episodic_memory.get_recent_events(limit=limit)
+    return {"events": events, "count": len(events)}
 
 
 @router.get("/telemetry")
 async def get_telemetry():
-    """Returns current performance telemetry (FPS, latency, tracks, etc.)."""
+    """Returns real-time telemetry snapshot (FPS, latency, tracks, features)."""
     bridge = _get_bridge()
     return bridge.get_telemetry()
 
 
 @router.get("/config")
 async def get_config():
-    """Returns the current runtime configuration state."""
+    """Returns current runtime configuration toggles."""
     bridge = _get_bridge()
-    status = bridge.get_status()
+    sahi_active = bool(bridge.detector.sahi_config and bridge.detector.sahi_config.enabled)
     return {
-        "sahi_enabled": status["sahi_enabled"],
-        "tracking_enabled": status["tracking_enabled"],
-        "ocr_enabled": status["ocr_enabled"],
-        "rag_enabled": status["rag_enabled"],
-        "memory_enabled": status["memory_enabled"],
+        "sahi_enabled": sahi_active,
+        "tracking_enabled": bridge._tracking_enabled,
+        "ocr_enabled": bridge._ocr_enabled,
+        "gestures_enabled": bridge._gestures_enabled,
+        "target_filter_mode": bridge._target_filter_mode.value,
+        "memory_enabled": bridge._enable_memory,
+        "rag_enabled": bridge._enable_rag,
     }
 
 
@@ -168,5 +169,23 @@ async def update_config(request: ConfigUpdateRequest):
             result["tracking_enabled"] = new_state
         else:
             result["tracking_enabled"] = bridge._tracking_enabled
+
+    if request.ocr_enabled is not None:
+        if request.ocr_enabled != bridge._ocr_enabled:
+            new_state = bridge.set_ocr(request.ocr_enabled)
+            result["ocr_enabled"] = new_state
+        else:
+            result["ocr_enabled"] = bridge._ocr_enabled
+
+    if request.gestures_enabled is not None:
+        if request.gestures_enabled != bridge._gestures_enabled:
+            new_state = bridge.set_gestures(request.gestures_enabled)
+            result["gestures_enabled"] = new_state
+        else:
+            result["gestures_enabled"] = bridge._gestures_enabled
+
+    if request.target_filter_mode is not None:
+        new_mode = bridge.set_target_filter_mode(request.target_filter_mode)
+        result["target_filter_mode"] = new_mode
 
     return {"updated": True, "config": result}
