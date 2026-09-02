@@ -51,10 +51,12 @@ class IntentClassifier:
     """
 
     KNOWN_OBJECTS = [
-        "person", "face", "laptop", "cell phone", "phone", "smartphone", "mouse", "keyboard", "book",
+        "person", "face", "human face", "hand", "human hand", "open palm", "pointing hand", "fist", "thumbs up",
+        "laptop", "cell phone", "phone", "smartphone", "mouse", "computer mouse", "keyboard", "book",
         "bottle", "cup", "chair", "tv", "monitor", "backpack", "pen", "pencil", "notebook",
         "clock", "vase", "potted plant", "plant", "dining table", "table", "desk",
-        "headphones", "glasses", "water bottle", "handbag", "it", "that", "this", "object"
+        "headphones", "headset", "glasses", "eyeglasses", "eyeglass", "sunglasses", "spectacles",
+        "water bottle", "handbag", "wrist watch", "watch", "smartwatch", "it", "that", "this", "object"
     ]
 
     def classify(self, query: str) -> ParsedQuery:
@@ -199,10 +201,10 @@ class IntentClassifier:
 
         # 10. Object Info / Inspection intent
         info_phrases = [
-            "inspect", "inspect this", "inspect the", "what is this", "what is that",
-            "tell me about", "what's that", "explain the", "explain this", "explain",
+            "inspect", "inspect this", "inspect the", "what is this", "what is that", "what is",
+            "tell me about", "tell me about the", "what's that", "explain the", "explain this", "explain",
             "information about", "info on", "details about", "what kind of",
-            "breakdown of", "profile of", "describe the", "describe this"
+            "breakdown of", "profile of", "describe the", "describe this", "describe", "what are"
         ]
         if any(ip in q for ip in info_phrases) or (target_object is not None and len(q.split()) <= 4):
             return ParsedQuery(

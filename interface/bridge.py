@@ -950,12 +950,21 @@ class AuraBridge:
         k_source = k_item.source if k_item else "Curated Intelligence"
 
         # 3. Query Conversation Engine
-        chat_query = f"What is this {target_str}?"
+        chat_query = f"Describe {target_str} in detail."
         chat_resp = self.send_chat(chat_query)
         response_text = chat_resp.get("response_text", "")
 
-        # Fallback to rich structured breakdown if response is too brief or contains generic fallback text
-        if not response_text or len(response_text) < 15 or "do not see" in response_text.lower() or "aura" in response_text.lower():
+        # Fallback to rich structured breakdown if response is too brief, generic, or hijacked by an unrelated entity
+        is_hijacked = False
+        if target_str not in ("object", "entity", "target"):
+            lower_resp = response_text.lower()
+            lower_target = target_str.lower()
+            lower_title = k_title.lower() if k_title else ""
+            # If the response doesn't mention the target or its title
+            if lower_target not in lower_resp and (not lower_title or lower_title not in lower_resp):
+                is_hijacked = True
+
+        if not response_text or len(response_text) < 15 or "do not see" in response_text.lower() or "aura" in response_text.lower() or is_hijacked:
             response_text = f"{k_title} ({k_category}): {k_summary}"
             if ocr_texts:
                 response_text += f" Extracted OCR text: {', '.join([f'\"{t}\"' for t in ocr_texts])}."
