@@ -70,6 +70,9 @@ export function useWebSocket(url = null) {
             case 'inspect_response':
               setInspectResponse(msg.data);
               break;
+            case 'deselect_all':
+              setInspectResponse(null);
+              break;
             case 'config_update':
               setConfigUpdate(msg.data);
               setTelemetry((prev) => (prev ? { ...prev, ...msg.data } : msg.data));
@@ -169,6 +172,11 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'cycle_target_filter' });
   }, [sendMessage]);
 
+  const clearInspect = useCallback(() => {
+    setInspectResponse(null);
+    sendMessage({ type: 'deselect_all' });
+  }, [sendMessage]);
+
   return {
     isConnected,
     lastFrame,
@@ -185,6 +193,7 @@ export function useWebSocket(url = null) {
     searchRAG,
     searchMemory,
     inspectEntity,
+    clearInspect,
     toggleSAHI,
     toggleTracking,
     toggleOCR,
