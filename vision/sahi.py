@@ -192,26 +192,44 @@ def apply_nms_merging(
 
         # Accumulate overlapping matching detections for weighted coordinate refinement
         overlapping: List[Detection] = [best_det]
+        current_union = list(best_det.bbox)
 
         for other_det in sorted_dets:
             if match_class and (best_det.class_id != other_det.class_id):
                 remaining.append(other_det)
                 continue
 
-            iou = compute_iou(best_det.bbox, other_det.bbox)
-            ios = compute_ios(best_det.bbox, other_det.bbox)
-            if iou >= iou_threshold or ios >= 0.60:
+            iou = compute_iou(current_union, other_det.bbox)
+            ios = compute_ios(current_union, other_det.bbox)
+            if iou >= iou_threshold or ios >= 0.45:
                 overlapping.append(other_det)
+                current_union = [
+                    min(current_union[0], other_det.bbox[0]),
+                    min(current_union[1], other_det.bbox[1]),
+                    max(current_union[2], other_det.bbox[2]),
+                    max(current_union[3], other_det.bbox[3]),
+                ]
             else:
                 remaining.append(other_det)
 
-        # Weighted box merging for sub-pixel accuracy
+        # Intelligent box merging: preserves outer boundary when containment occurs
         if len(overlapping) > 1:
-            total_weight = sum(d.confidence for d in overlapping)
-            fused_x1 = sum(d.bbox[0] * d.confidence for d in overlapping) / total_weight
-            fused_y1 = sum(d.bbox[1] * d.confidence for d in overlapping) / total_weight
-            fused_x2 = sum(d.bbox[2] * d.confidence for d in overlapping) / total_weight
-            fused_y2 = sum(d.bbox[3] * d.confidence for d in overlapping) / total_weight
+            areas = [max(1.0, (d.bbox[2] - d.bbox[0]) * (d.bbox[3] - d.bbox[1])) for d in overlapping]
+            max_area = max(areas)
+            min_area = min(areas)
+
+            # If containment or disparate scales, use union boundary so macro objects aren't shrunk
+            if (max_area / min_area) > 1.6:
+                fused_x1 = min(d.bbox[0] for d in overlapping)
+                fused_y1 = min(d.bbox[1] for d in overlapping)
+                fused_x2 = max(d.bbox[2] for d in overlapping)
+                fused_y2 = max(d.bbox[3] for d in overlapping)
+            else:
+                total_weight = sum(d.confidence for d in overlapping)
+                fused_x1 = sum(d.bbox[0] * d.confidence for d in overlapping) / total_weight
+                fused_y1 = sum(d.bbox[1] * d.confidence for d in overlapping) / total_weight
+                fused_x2 = sum(d.bbox[2] * d.confidence for d in overlapping) / total_weight
+                fused_y2 = sum(d.bbox[3] * d.confidence for d in overlapping) / total_weight
 
             fused_det = Detection(
                 class_id=best_det.class_id,
@@ -263,6 +281,7 @@ class SlicedInferenceEngine:
 
         h, w = image.shape[:2]
         all_detections: List[Detection] = []
+        full_frame_dets: List[Detection] = []
 
         # 1. Full-frame global glance (captures large/contextual objects)
         if self.config.include_full_frame:
@@ -303,6 +322,17 @@ class SlicedInferenceEngine:
                     max(0.0, min(float(w), global_bbox[2])),
                     max(0.0, min(float(h), global_bbox[3])),
                 ]
+
+                # Suppress redundant slice fragments of macro objects already captured in full frame
+                if full_frame_dets and det.class_name.lower() in ("person", "couch", "bed", "dining table"):
+                    is_sub_fragment = False
+                    for full_det in full_frame_dets:
+                        if full_det.class_name.lower() == det.class_name.lower():
+                            if compute_ios(full_det.bbox, global_bbox) >= 0.40:
+                                is_sub_fragment = True
+                                break
+                    if is_sub_fragment:
+                        continue
 
                 all_detections.append(
                     Detection(
