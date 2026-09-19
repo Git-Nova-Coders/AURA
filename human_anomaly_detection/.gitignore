@@ -1,0 +1,35 @@
+# Virtual environments
+venv/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Datasets
+dataset/
+dataset_raw/
+splits/
+*.zip
+*.tar.gz
+*.tar
+
+# Models and checkpoints
+models/
+*.h5
+*.keras
+*.pt
+*.pth
+
+# Results and logs
+results/
+logs/
+*.log
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
