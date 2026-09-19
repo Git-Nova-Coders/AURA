@@ -33,3 +33,6 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# AI Agent Guides
+Human_Anomaly_Detection_*.md
