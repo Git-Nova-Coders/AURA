@@ -153,5 +153,10 @@ def run_training_pipeline(epochs=10, patience=3):
     print(f"\nTraining complete. History plot saved to {plot_path}")
 
 if __name__ == "__main__":
-    # We run 3 epochs by default to demonstrate the pipeline runs correctly without taking hours.
-    run_training_pipeline(epochs=3, patience=2)
+    import argparse
+    parser = argparse.ArgumentParser(description="Train Human Anomaly Detection Model")
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
+    parser.add_argument("--patience", type=int, default=5, help="Early stopping patience")
+    args = parser.parse_args()
+    
+    run_training_pipeline(epochs=args.epochs, patience=args.patience)
