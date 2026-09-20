@@ -8,7 +8,7 @@ from src.anomaly_detector import AnomalyDetector
 from src.person_detector import PersonDetector
 import src.config as config
 
-def run_image(image_path: str, person_detector: PersonDetector, anomaly_detector: AnomalyDetector, save_output: bool = False):
+def run_image(image_path: str, person_detector: PersonDetector, anomaly_detector: AnomalyDetector, threshold: float = 0.65, save_output: bool = False):
     if not os.path.exists(image_path):
         print(f"Error: File not found: {image_path}")
         return
@@ -18,7 +18,7 @@ def run_image(image_path: str, person_detector: PersonDetector, anomaly_detector
         print(f"Error: Could not decode image: {image_path}")
         return
 
-    annotated = process_frame(frame, person_detector, anomaly_detector)
+    annotated, _ = process_frame(frame, person_detector, anomaly_detector, threshold=threshold)
     
     if save_output:
         os.makedirs(config.RESULTS_DIR, exist_ok=True)
@@ -32,33 +32,52 @@ def run_image(image_path: str, person_detector: PersonDetector, anomaly_detector
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-def process_frame(frame, person_detector: PersonDetector, anomaly_detector: AnomalyDetector):
+def process_frame(frame, person_detector: PersonDetector, anomaly_detector: AnomalyDetector, threshold: float = 0.65, prev_probs=None):
+    """
+    Detects humans, runs anomaly inference on each person crop,
+    and paints bounding boxes with status labels.
+    """
     annotated = frame.copy()
+    current_probs = []
     
     # 1. Detect person bounding boxes
     person_results = person_detector.detect_and_crop(frame)
     
     # If no persons detected, run anomaly detector on whole frame as fallback
     if len(person_results) == 0:
-        pred = anomaly_detector.predict(frame)
-        label = pred.get("label", "Unknown")
+        pred = anomaly_detector.predict(frame, threshold=threshold)
+        label = pred.get("label", "Normal")
         conf = pred.get("confidence", 0.0) * 100
         color = (0, 255, 0) if label == "Normal" else (0, 0, 255)
         text = f"Full Frame: {label} ({conf:.1f}%)"
         cv2.putText(annotated, text, (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        return annotated
+        return annotated, []
 
     # 2. For each detected person crop, predict anomaly
-    for item in person_results:
+    for idx, item in enumerate(person_results):
         crop = item["crop"]
         x1, y1, x2, y2 = item["box"]
         
-        pred = anomaly_detector.predict(crop)
-        label = pred.get("label", "Unknown")
-        conf = pred.get("confidence", 0.0) * 100
+        pred = anomaly_detector.predict(crop, threshold=threshold)
+        raw_prob = pred.get("anomaly_probability", 0.0)
         
-        # Color coding: Green for Normal, Red for Anomaly
-        color = (0, 255, 0) if label == "Normal" else (0, 0, 255)
+        # Temporal smoothing (Exponential Moving Average) if history is available
+        if prev_probs is not None and idx < len(prev_probs):
+            smoothed_prob = 0.7 * prev_probs[idx] + 0.3 * raw_prob
+        else:
+            smoothed_prob = raw_prob
+            
+        current_probs.append(smoothed_prob)
+        
+        # Apply calibrated decision threshold
+        if smoothed_prob >= threshold:
+            label = "Anomaly"
+            conf = smoothed_prob * 100
+            color = (0, 0, 255)  # Red alert
+        else:
+            label = "Normal"
+            conf = (1.0 - smoothed_prob) * 100
+            color = (0, 255, 0)  # Green standard
         
         # Draw bounding box
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
@@ -70,9 +89,9 @@ def process_frame(frame, person_detector: PersonDetector, anomaly_detector: Anom
         cv2.rectangle(annotated, (x1, badge_y1), (x1 + w + 10, badge_y1 + h + 8), color, cv2.FILLED)
         cv2.putText(annotated, label_text, (x1 + 5, badge_y1 + h + 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
-    return annotated
+    return annotated, current_probs
 
-def run_video_or_camera(source, person_detector: PersonDetector, anomaly_detector: AnomalyDetector):
+def run_video_or_camera(source, person_detector: PersonDetector, anomaly_detector: AnomalyDetector, threshold: float = 0.65):
     # Parse source as camera index if numeric
     if isinstance(source, str) and source.isdigit():
         source = int(source)
@@ -83,9 +102,11 @@ def run_video_or_camera(source, person_detector: PersonDetector, anomaly_detecto
         return
 
     print(f"Streaming from source: {source}")
+    print(f"Anomaly threshold set to: {threshold * 100:.1f}%")
     print("Press 'q' to exit.")
 
     prev_time = time.time()
+    tracked_probs = None
 
     while True:
         ret, frame = cap.read()
@@ -93,7 +114,10 @@ def run_video_or_camera(source, person_detector: PersonDetector, anomaly_detecto
             print("Video stream finished or frame unreadable.")
             break
 
-        annotated = process_frame(frame, person_detector, anomaly_detector)
+        annotated, tracked_probs = process_frame(
+            frame, person_detector, anomaly_detector,
+            threshold=threshold, prev_probs=tracked_probs
+        )
 
         # Calculate FPS
         curr_time = time.time()
@@ -117,6 +141,7 @@ def main():
     parser.add_argument("--image", type=str, help="Path to input image")
     parser.add_argument("--video", type=str, help="Path to input video file or camera index (e.g. 0)")
     parser.add_argument("--camera", action="store_true", help="Launch live camera (webcam index 0)")
+    parser.add_argument("--threshold", type=float, default=0.65, help="Anomaly decision threshold (default: 0.65)")
     parser.add_argument("--save", action="store_true", help="Save annotated output when running in image mode")
     args = parser.parse_args()
 
@@ -132,16 +157,16 @@ def main():
     print("Models successfully loaded and ready.")
 
     if args.image:
-        run_image(args.image, person_det, anomaly_det, save_output=args.save)
+        run_image(args.image, person_det, anomaly_det, threshold=args.threshold, save_output=args.save)
     elif args.video:
-        run_video_or_camera(args.video, person_det, anomaly_det)
+        run_video_or_camera(args.video, person_det, anomaly_det, threshold=args.threshold)
     elif args.camera:
-        run_video_or_camera(0, person_det, anomaly_det)
+        run_video_or_camera(0, person_det, anomaly_det, threshold=args.threshold)
     else:
         print("No input mode specified. Defaulting to demo on sample test image...")
         demo_img = os.path.join("dataset", "test", "normal", "norm_test_00000.jpg")
         if os.path.exists(demo_img):
-            run_image(demo_img, person_det, anomaly_det, save_output=True)
+            run_image(demo_img, person_det, anomaly_det, threshold=args.threshold, save_output=True)
         else:
             print("Usage: python app.py --image <path> | --video <path_or_cam_idx> | --camera")
 

@@ -42,7 +42,7 @@ class AnomalyDetector:
         self.model.to(self.device)
         self.model.eval()
         
-    def predict(self, person_image: np.ndarray) -> dict:
+    def predict(self, person_image: np.ndarray, threshold: float = 0.65) -> dict:
         """
         Accepts a raw BGR image (as a NumPy array, e.g., from OpenCV or Aura camera frame),
         preprocesses it, and returns the anomaly classification and confidence score.
@@ -67,9 +67,8 @@ class AnomalyDetector:
                 output = self.model(input_tensor)
                 prob = torch.sigmoid(output).item()
                 
-            # 5. Convert prediction to label and confidence
-            # Threshold is 0.5; Label 0 is Normal, Label 1 is Anomaly
-            if prob >= 0.5:
+            # 5. Convert prediction to label and confidence using calibrated threshold
+            if prob >= threshold:
                 label = "Anomaly"
                 confidence = prob
             else:
@@ -78,7 +77,8 @@ class AnomalyDetector:
                 
             return {
                 "label": label,
-                "confidence": round(float(confidence), 4)
+                "confidence": round(float(confidence), 4),
+                "anomaly_probability": round(float(prob), 4)
             }
             
         except Exception as e:
