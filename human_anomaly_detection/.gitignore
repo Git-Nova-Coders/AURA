@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # Datasets
 dataset/
@@ -27,6 +28,14 @@ models/
 results/
 logs/
 *.log
+
+# Presentations, documents & export files
+*.pptx
+*.ppt
+*.docx
+*.pdf
+generate_*.py
+presentation_*.py
 
 # IDE and OS files
 .vscode/
