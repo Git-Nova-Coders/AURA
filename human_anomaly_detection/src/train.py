@@ -1,8 +1,11 @@
 import os
+import json
+import argparse
+import time
 import torch
 import matplotlib.pyplot as plt
 from . import config
-from .model import AnomalyCNN, get_loss_and_optimizer, calculate_metrics
+from .model import get_model, get_loss_and_optimizer, calculate_metrics
 from .data_loader import get_dataset_paths, data_generator
 
 def plot_history(history, save_path):
@@ -30,8 +33,23 @@ def plot_history(history, save_path):
     plt.savefig(save_path)
     plt.close()
 
-def run_training_pipeline(epochs=10, patience=3):
-    print("Starting training pipeline...")
+def log_experiment(record: dict):
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
+    exp_file = os.path.join(config.RESULTS_DIR, "experiments.json")
+    experiments = []
+    if os.path.exists(exp_file):
+        try:
+            with open(exp_file, "r") as f:
+                experiments = json.load(f)
+        except Exception:
+            experiments = []
+            
+    experiments.append(record)
+    with open(exp_file, "w") as f:
+        json.dump(experiments, f, indent=4)
+
+def run_training_pipeline(model_arch="mobilenet", epochs=20, patience=5, lr=0.0005, pos_weight=None):
+    print(f"Starting training pipeline with architecture: '{model_arch}'...")
     
     # 1. Ensure directories exist
     os.makedirs(config.MODELS_DIR, exist_ok=True)
@@ -42,8 +60,8 @@ def run_training_pipeline(epochs=10, patience=3):
     print(f"Using device: {device}")
     
     # 3. Initialize Model, Loss, Optimizer
-    model = AnomalyCNN().to(device)
-    criterion, optimizer = get_loss_and_optimizer(model)
+    model = get_model(model_arch).to(device)
+    criterion, optimizer = get_loss_and_optimizer(model, learning_rate=lr, pos_weight=pos_weight)
     
     # 4. Prepare Data Loaders
     train_paths, train_labels = get_dataset_paths('train')
@@ -61,11 +79,16 @@ def run_training_pipeline(epochs=10, patience=3):
     history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
     
     best_val_loss = float('inf')
+    best_val_acc = 0.0
     epochs_no_improve = 0
     best_model_path = os.path.join(config.MODELS_DIR, 'anomaly_model.pth')
     
+    start_time = time.time()
+    completed_epochs = 0
+    
     # 5. Training Loop
     for epoch in range(epochs):
+        completed_epochs += 1
         print(f"\nEpoch {epoch+1}/{epochs}")
         model.train()
         
@@ -93,10 +116,9 @@ def run_training_pipeline(epochs=10, patience=3):
             train_loss += loss.item()
             train_acc += calculate_metrics(outputs, targets)
             
-            if (step + 1) % 10 == 0 or step == steps_per_epoch - 1:
+            if (step + 1) % 15 == 0 or step == steps_per_epoch - 1:
                 print(f"  Step {step+1}/{steps_per_epoch} - Loss: {loss.item():.4f}")
                 
-        # Calculate epoch metrics
         avg_train_loss = train_loss / steps_per_epoch
         avg_train_acc = train_acc / steps_per_epoch
         
@@ -137,9 +159,22 @@ def run_training_pipeline(epochs=10, patience=3):
         # 7. Model Checkpointing & Early Stopping
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
+            best_val_acc = avg_val_acc
             epochs_no_improve = 0
             torch.save(model.state_dict(), best_model_path)
-            print(f"--> Saved best model to {best_model_path}")
+            
+            # Save model config metadata
+            model_config_path = os.path.join(config.MODELS_DIR, "model_config.json")
+            with open(model_config_path, "w") as f:
+                json.dump({
+                    "architecture": model_arch,
+                    "target_size": list(config.TARGET_SIZE),
+                    "best_val_loss": round(best_val_loss, 4),
+                    "best_val_acc": round(best_val_acc, 4),
+                    "classes": {"0": "Normal", "1": "Anomaly"}
+                }, f, indent=4)
+                
+            print(f"--> Saved best model ({model_arch}) to {best_model_path}")
         else:
             epochs_no_improve += 1
             print(f"--> No improvement for {epochs_no_improve} epochs.")
@@ -150,13 +185,30 @@ def run_training_pipeline(epochs=10, patience=3):
     # 8. Save Training History Plot
     plot_path = os.path.join(config.RESULTS_DIR, 'training_history.png')
     plot_history(history, plot_path)
-    print(f"\nTraining complete. History plot saved to {plot_path}")
+    
+    # 9. Track Experiment
+    duration = time.time() - start_time
+    experiment_id = f"EXP-{int(time.time())}"
+    log_experiment({
+        "experiment_id": experiment_id,
+        "architecture": model_arch,
+        "epochs_requested": epochs,
+        "epochs_completed": completed_epochs,
+        "batch_size": config.BATCH_SIZE,
+        "learning_rate": lr,
+        "best_val_loss": round(best_val_loss, 4),
+        "best_val_acc": round(best_val_acc, 4),
+        "training_duration_seconds": round(duration, 2)
+    })
+    
+    print(f"\nTraining complete. Model & metadata saved.")
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="Train Human Anomaly Detection Model")
-    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs")
-    parser.add_argument("--patience", type=int, default=5, help="Early stopping patience")
+    parser.add_argument("--model", type=str, default="mobilenet", choices=["baseline", "mobilenet"], help="Model architecture")
+    parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs")
+    parser.add_argument("--patience", type=int, default=4, help="Early stopping patience")
+    parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
     args = parser.parse_args()
     
-    run_training_pipeline(epochs=args.epochs, patience=args.patience)
+    run_training_pipeline(model_arch=args.model, epochs=args.epochs, patience=args.patience, lr=args.lr)

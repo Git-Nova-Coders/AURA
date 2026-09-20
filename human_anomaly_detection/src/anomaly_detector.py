@@ -1,14 +1,17 @@
 import os
+import json
 import torch
 import numpy as np
 
-from .model import AnomalyCNN
+from .model import get_model, AnomalyCNN
 from .preprocessing import preprocess_image
+from . import config
 
 class AnomalyDetector:
     """
     Inference Engine for Human Anomaly Detection.
     Provides a clean, reusable interface for external projects (like Aura).
+    Automatically inspects model_config.json to load the appropriate architecture.
     """
     def __init__(self, model_path="models/anomaly_model.pth"):
         if not os.path.exists(model_path):
@@ -16,9 +19,26 @@ class AnomalyDetector:
             
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Initialize architecture and load trained weights
-        self.model = AnomalyCNN()
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+        # Check if architecture is defined in model_config.json
+        config_path = os.path.join(config.MODELS_DIR, "model_config.json")
+        arch = "baseline"
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r") as f:
+                    meta = json.load(f)
+                    arch = meta.get("architecture", "baseline")
+            except Exception:
+                arch = "baseline"
+
+        # Initialize appropriate architecture
+        try:
+            self.model = get_model(arch, pretrained=False)
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+        except Exception:
+            # Fallback to baseline if state_dict fails with selected arch
+            self.model = AnomalyCNN()
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+            
         self.model.to(self.device)
         self.model.eval()
         

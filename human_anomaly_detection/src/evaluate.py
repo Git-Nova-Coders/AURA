@@ -37,13 +37,29 @@ def evaluate_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # 1. Load best model
+    # 1. Load best model with dynamic architecture detection
     model_path = os.path.join(config.MODELS_DIR, 'anomaly_model.pth')
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model not found at {model_path}. Please run training first.")
         
-    model = AnomalyCNN()
-    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+    config_path = os.path.join(config.MODELS_DIR, "model_config.json")
+    arch = "baseline"
+    if os.path.exists(config_path):
+        try:
+            import json
+            with open(config_path, "r") as f:
+                arch = json.load(f).get("architecture", "baseline")
+        except Exception:
+            arch = "baseline"
+
+    try:
+        from .model import get_model
+        model = get_model(arch, pretrained=False)
+        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+    except Exception:
+        model = AnomalyCNN()
+        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+
     model.to(device)
     model.eval()
     
