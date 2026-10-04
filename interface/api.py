@@ -231,3 +231,31 @@ async def get_network_ips():
     if not ip_list:
         ip_list.append("localhost")
     return {"ips": ip_list, "port": 8420}
+
+
+class RemoteFrameRequest(BaseModel):
+    frame: str
+    device_info: Optional[dict] = None
+
+
+@router.post("/remote/frame")
+async def post_remote_frame(request: RemoteFrameRequest):
+    """Fallback HTTP endpoint for streaming frames from mobile devices."""
+    import base64
+    import cv2
+    import numpy as np
+
+    bridge = _get_bridge()
+    frame_b64 = request.frame
+    if "," in frame_b64:
+        frame_b64 = frame_b64.split(",", 1)[1]
+    try:
+        raw_bytes = base64.b64decode(frame_b64)
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is not None:
+            bridge.ingest_remote_frame(img, device_info=request.device_info)
+            return {"status": "ok"}
+    except Exception as e:
+        logger.debug(f"HTTP frame ingest error: {e}")
+    return {"status": "error"}
