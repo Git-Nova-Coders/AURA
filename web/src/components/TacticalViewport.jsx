@@ -253,6 +253,13 @@ export default function TacticalViewport({
                 <span>🏃 ACTION: {telemetry.har_activity.toUpperCase()} ({Math.round((telemetry.har_confidence || 0) * 100)}%)</span>
               </div>
             )}
+
+            {telemetry?.camera_source === 'remote' && telemetry?.remote_device_connected && (
+              <div className="v2-pill v2-pill-emerald animate-slide-in" title="Streaming from external device camera">
+                <span className="v2-pulse-dot dot-emerald animate-pulse" />
+                <span>📱 REMOTE DEVICE CAMERA ACTIVE</span>
+              </div>
+            )}
           </div>
 
           {/* Main Video Stream Canvas */}

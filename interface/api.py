@@ -51,6 +51,7 @@ class ConfigUpdateRequest(BaseModel):
     gestures_enabled: Optional[bool] = None
     target_filter_mode: Optional[str] = None
     har_enabled: Optional[bool] = None
+    camera_source: Optional[str] = None
 
 
 # ── Endpoints ──
@@ -145,6 +146,10 @@ async def get_config():
         "ocr_enabled": bridge._ocr_enabled,
         "gestures_enabled": bridge._gestures_enabled,
         "har_enabled": bridge._enable_har,
+        "camera_source": bridge._camera_source,
+        "remote_device_connected": bool(
+            bridge._remote_frame is not None and (bridge._remote_frame_time and (bridge._remote_frame_time > 0))
+        ),
         "target_filter_mode": bridge._target_filter_mode.value,
         "memory_enabled": bridge._enable_memory,
         "rag_enabled": bridge._enable_rag,
@@ -197,4 +202,60 @@ async def update_config(request: ConfigUpdateRequest):
         new_mode = bridge.set_target_filter_mode(request.target_filter_mode)
         result["target_filter_mode"] = new_mode
 
+    if request.camera_source is not None:
+        new_src = bridge.set_camera_source(request.camera_source)
+        result["camera_source"] = new_src
+
     return {"updated": True, "config": result}
+
+
+@router.get("/remote/status")
+async def get_remote_status():
+    """Returns remote camera stream connection status and metadata."""
+    bridge = _get_bridge()
+    return bridge.get_remote_status()
+
+
+@router.get("/network/ips")
+async def get_network_ips():
+    """Returns host machine IP addresses for generating QR codes and remote camera URLs."""
+    import socket
+    ip_list = []
+    try:
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if not ip.startswith("127."):
+                ip_list.append(ip)
+    except Exception as e:
+        logger.debug(f"IP resolution error: {e}")
+    if not ip_list:
+        ip_list.append("localhost")
+    return {"ips": ip_list, "port": 8420}
+
+
+class RemoteFrameRequest(BaseModel):
+    frame: str
+    device_info: Optional[dict] = None
+
+
+@router.post("/remote/frame")
+async def post_remote_frame(request: RemoteFrameRequest):
+    """Fallback HTTP endpoint for streaming frames from mobile devices."""
+    import base64
+    import cv2
+    import numpy as np
+
+    bridge = _get_bridge()
+    frame_b64 = request.frame
+    if "," in frame_b64:
+        frame_b64 = frame_b64.split(",", 1)[1]
+    try:
+        raw_bytes = base64.b64decode(frame_b64)
+        nparr = np.frombuffer(raw_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is not None:
+            bridge.ingest_remote_frame(img, device_info=request.device_info)
+            return {"status": "ok"}
+    except Exception as e:
+        logger.debug(f"HTTP frame ingest error: {e}")
+    return {"status": "error"}

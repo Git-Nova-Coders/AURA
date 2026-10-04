@@ -95,6 +95,8 @@ class TelemetrySnapshot:
     active_toast: Optional[str] = None
     har_activity: Optional[str] = None
     har_confidence: float = 0.0
+    camera_source: str = "local"
+    remote_device_connected: bool = False
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -123,6 +125,8 @@ class TelemetrySnapshot:
             "active_toast": self.active_toast,
             "har_activity": self.har_activity,
             "har_confidence": round(self.har_confidence, 2),
+            "camera_source": self.camera_source,
+            "remote_device_connected": self.remote_device_connected,
             "timestamp": round(self.timestamp, 2),
         }
 
@@ -268,10 +272,17 @@ class AuraBridge:
         self._enable_memory = enable_memory
         self._enable_rag = enable_rag
 
-        # Camera / synthetic
+        # Camera / synthetic / remote camera
         self._camera: Optional[CameraAdapter] = None
         self._use_synthetic = False
         self._pipeline_thread: Optional[threading.Thread] = None
+
+        # Remote device camera state
+        self._camera_source: str = "local"  # "local", "remote", "synthetic"
+        self._remote_frame: Optional[np.ndarray] = None
+        self._remote_frame_time: float = 0.0
+        self._remote_device_info: Optional[Dict[str, Any]] = None
+        self._remote_lock = threading.Lock()
 
         # OCR cache
         self._last_ocr_texts: List[TextDetection] = []
@@ -471,6 +482,7 @@ class AuraBridge:
                 # Scan OCR in background at 1.5s interval without blocking video stream
                 time.sleep(1.5)
 
+        # Always start async inference so remote frames are processed as soon as they arrive
         if not self._use_synthetic:
             infer_thread = threading.Thread(target=async_inference_worker, daemon=True, name="AURA_Async_Infer")
             infer_thread.start()
@@ -482,7 +494,62 @@ class AuraBridge:
             t0 = time.perf_counter()
 
             # 1. Capture frame & detect
-            if self._use_synthetic:
+            active_source = self._camera_source
+            remote_valid = False
+            remote_img = None
+            if active_source == "remote":
+                with self._remote_lock:
+                    if self._remote_frame is not None and (time.time() - self._remote_frame_time) < 3.0:
+                        remote_valid = True
+                        remote_img = self._remote_frame.copy()
+
+            if remote_valid and remote_img is not None:
+                # Direct inference on remote mobile camera frame
+                frame = Frame(
+                    image=remote_img,
+                    timestamp=time.time(),
+                    source_id="remote_device",
+                )
+                with frame_lock:
+                    latest_camera_frame = frame
+                with det_lock:
+                    detections = self._apply_target_filter(list(current_camera_dets))
+                infer_latency_ms = last_infer_latency
+            elif active_source == "remote" and not remote_valid:
+                # Remote mode but phone hasn't sent a frame yet — show animated waiting screen
+                wait_img = np.zeros((480, 640, 3), dtype=np.uint8)
+                # Subtle grid
+                for gx in range(0, 640, 40):
+                    cv2.line(wait_img, (gx, 0), (gx, 480), (20, 20, 40), 1)
+                for gy in range(0, 480, 40):
+                    cv2.line(wait_img, (0, gy), (640, gy), (20, 20, 40), 1)
+                # Animated ring
+                ring_r = int(60 + 10 * np.sin(frame_count * 0.08))
+                cv2.circle(wait_img, (320, 210), ring_r, (0, 180, 255), 2)
+                cv2.circle(wait_img, (320, 210), ring_r - 15, (0, 80, 160), 1)
+                # Phone icon text
+                cv2.putText(wait_img, "REMOTE CAMERA", (210, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
+                cv2.putText(wait_img, "LINKED — AWAITING STREAM", (140, 195),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 150, 220), 1)
+                # Animated dots
+                dots = "." * ((frame_count // 8 % 4))
+                cv2.putText(wait_img, f"Waiting for phone feed{dots}", (175, 260),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.52, (180, 180, 180), 1)
+                cv2.putText(wait_img, "Open  http://[IP]:8420/remote-camera  on phone", (68, 310),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 220, 100), 1)
+                cv2.putText(wait_img, "Then tap  \"START STREAMING\"", (190, 340),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 220, 100), 1)
+                cv2.putText(wait_img, "AURA // REMOTE SENSOR NODE STANDBY", (130, 460),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 60, 120), 1)
+                frame = Frame(
+                    image=wait_img,
+                    timestamp=time.time(),
+                    source_id="remote_waiting",
+                )
+                detections = []
+                infer_latency_ms = 0.0
+            elif self._use_synthetic:
                 frame, raw_detections, synth_texts = self._create_synthetic_frame(frame_count)
                 if self._ocr_enabled:
                     self._last_ocr_texts = synth_texts
@@ -704,6 +771,10 @@ class AuraBridge:
                     active_toast=toast_str,
                     har_activity=har_activity_val,
                     har_confidence=har_conf_val,
+                    camera_source=self._camera_source,
+                    remote_device_connected=bool(
+                        self._remote_frame is not None and (time.time() - self._remote_frame_time) < 4.0
+                    ),
                 )
 
             frame_count += 1
@@ -897,6 +968,51 @@ class AuraBridge:
         with self._lock:
             self._telemetry.har_enabled = self._enable_har
         return self._enable_har
+
+    def ingest_remote_frame(self, frame_bgr: np.ndarray, device_info: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Ingests a frame streamed in real time from a remote device (e.g. mobile phone camera).
+        Thread-safely stores it in the remote buffer and auto-activates remote camera mode.
+        """
+        with self._remote_lock:
+            self._remote_frame = frame_bgr
+            self._remote_frame_time = time.time()
+            if device_info:
+                self._remote_device_info = device_info
+            # Auto-switch to remote if currently local
+            if self._camera_source != "remote":
+                self._camera_source = "remote"
+                self.gesture_controller.trigger_toast("📱 REMOTE CAMERA LINKED & STREAMING", duration=2.5)
+
+    def set_camera_source(self, source: str) -> str:
+        """
+        Switches between camera inputs:
+        - "local": Built-in laptop webcam
+        - "remote": Connected mobile device camera
+        - "synthetic": Cyber visual simulator
+        """
+        source = source.lower()
+        if source not in ("local", "remote", "synthetic"):
+            source = "local"
+        self._camera_source = source
+        icon = "📱" if source == "remote" else ("💻" if source == "local" else "⚡")
+        self.gesture_controller.trigger_toast(f"{icon} CAMERA SOURCE: {source.upper()}", duration=2.0)
+        with self._lock:
+            self._telemetry.camera_source = self._camera_source
+        return self._camera_source
+
+    def get_remote_status(self) -> Dict[str, Any]:
+        """Returns connection and streaming status of remote devices."""
+        with self._remote_lock:
+            connected = bool(
+                self._remote_frame is not None and (time.time() - self._remote_frame_time) < 4.0
+            )
+            return {
+                "active_source": self._camera_source,
+                "remote_connected": connected,
+                "device_info": self._remote_device_info or {},
+                "last_frame_age_sec": round(time.time() - self._remote_frame_time, 2) if self._remote_frame_time else None,
+            }
 
     def toggle_tracking(self) -> bool:
         """Toggles tracking on/off, updates telemetry synchronously, and returns new state."""

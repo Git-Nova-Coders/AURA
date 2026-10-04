@@ -7,6 +7,8 @@ import EntityMatrix from './components/EntityMatrix';
 import NeuralTerminal from './components/NeuralTerminal';
 import TacticalDeck from './components/TacticalDeck';
 import HoloGuideModal from './components/HoloGuideModal';
+import RemoteCameraModal from './components/RemoteCameraModal';
+import RemoteCameraStreamer from './components/RemoteCameraStreamer';
 import BootSequence from './components/boot/BootSequence';
 import './App.css';
 
@@ -16,9 +18,16 @@ import './App.css';
  * The Camera Viewport is the hero heart (75–85% presence).
  */
 export default function App() {
+  // Check if current browser route is the dedicated mobile camera streamer
+  const isRemoteStreamerRoute = window.location.pathname.startsWith('/remote-camera');
+  if (isRemoteStreamerRoute) {
+    return <RemoteCameraStreamer />;
+  }
+
   const ws = useWebSocket();
   const [isBooting, setIsBooting] = useState(true);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isRemoteCamModalOpen, setIsRemoteCamModalOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [hoveredEntity, setHoveredEntity] = useState(null);
   const [inspectHistory, setInspectHistory] = useState([]);
@@ -119,6 +128,7 @@ export default function App() {
           isConnected={ws.isConnected}
           telemetry={ws.telemetry}
           onOpenGuide={() => setIsGuideOpen(true)}
+          onOpenRemoteCam={() => setIsRemoteCamModalOpen(true)}
           onTriggerBoot={() => setIsBooting(true)}
         />
 
@@ -187,6 +197,14 @@ export default function App() {
           activeGesture={ws.telemetry?.active_gesture}
           isGesturesArmed={ws.telemetry?.gestures_enabled}
           onToggleGestures={ws.toggleGestures}
+        />
+
+        {/* ── Remote Device Camera Link Modal ── */}
+        <RemoteCameraModal
+          isOpen={isRemoteCamModalOpen}
+          onClose={() => setIsRemoteCamModalOpen(false)}
+          telemetry={ws.telemetry}
+          onSelectCameraSource={ws.setCameraSource}
         />
       </div>
     </>

@@ -197,6 +197,35 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         "data": {},
                     }))
 
+                elif msg_type == "set_camera_source":
+                    source = str(msg.get("source", "local"))
+                    if _bridge:
+                        new_src = _bridge.set_camera_source(source)
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"camera_source": new_src},
+                        }))
+
+                elif msg_type == "remote_frame":
+                    # Remote device streaming camera frame to AURA
+                    frame_b64 = msg.get("frame", "")
+                    device_info = msg.get("device_info", {})
+                    if frame_b64 and _bridge:
+                        try:
+                            import base64
+                            import cv2
+                            import numpy as np
+                            # Remove data:image/...;base64, prefix if present
+                            if "," in frame_b64:
+                                frame_b64 = frame_b64.split(",", 1)[1]
+                            raw_bytes = base64.b64decode(frame_b64)
+                            nparr = np.frombuffer(raw_bytes, np.uint8)
+                            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                            if img is not None:
+                                _bridge.ingest_remote_frame(img, device_info=device_info)
+                        except Exception as ex:
+                            logger.debug(f"Failed to ingest remote frame: {ex}")
+
                 elif msg_type == "ping":
                     await websocket.send_text(json.dumps({"type": "pong"}))
 

@@ -7,7 +7,13 @@ import { soundFX } from '../utils/audioFx';
  * Concentric rotating arc reactor ring, electric cyan branding,
  * laser emerald status tree, and glowing precision telemetry.
  */
-export default function HoloHeader({ isConnected, telemetry, onOpenGuide, onTriggerBoot }) {
+export default function HoloHeader({
+  isConnected,
+  telemetry,
+  onOpenGuide,
+  onOpenRemoteCam,
+  onTriggerBoot,
+}) {
   const [isMuted, setIsMuted] = useState(soundFX.muted);
 
   const toggleSound = () => {
@@ -123,6 +129,18 @@ export default function HoloHeader({ isConnected, telemetry, onOpenGuide, onTrig
               🔄
             </button>
           )}
+
+          {/* Remote Camera Device Link Trigger */}
+          <button
+            className={`v2-btn-manual ${telemetry?.remote_device_connected ? 'v2-btn-manual-emerald' : ''}`}
+            onClick={() => {
+              soundFX.playToggle(true);
+              if (onOpenRemoteCam) onOpenRemoteCam();
+            }}
+            title="Connect Phone/Tablet Camera via QR Code (/remote-camera)"
+          >
+            {telemetry?.remote_device_connected ? '📱 REMOTE CAM: LIVE' : '📱 REMOTE CAM'}
+          </button>
 
           {/* 3D Gesture Manual Modal Trigger */}
           <button

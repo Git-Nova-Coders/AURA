@@ -9,12 +9,14 @@ Usage:
     python run_dashboard.py --port 8420 --host 0.0.0.0
 """
 
+import os
 import sys
 import time
 import argparse
 import logging
 import webbrowser
 import threading
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +86,14 @@ def parse_args():
         "--llm", type=str, default="offline",
         help="LLM provider: offline, gemini, ollama, openai. Default: offline",
     )
+    parser.add_argument(
+        "--no-ssl", action="store_true",
+        help="Disable HTTPS (not recommended — mobile camera will be blocked by browser).",
+    )
+    parser.add_argument(
+        "--cert-dir", type=str, default="certs",
+        help="Directory to store/read the self-signed TLS certificate. Default: certs/",
+    )
     return parser.parse_args()
 
 
@@ -105,6 +115,27 @@ def main():
 
     if splash:
         splash.update_step(0.25, "LOADING NEURAL VISION & MODEL WEIGHTS...")
+
+    # ── SSL Certificate (auto-generate if missing) ─────────────────────────
+    ssl_certfile = None
+    ssl_keyfile = None
+    if not args.no_ssl:
+        cert_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.cert_dir)
+        cert_path = os.path.join(cert_dir, "cert.pem")
+        key_path  = os.path.join(cert_dir, "key.pem")
+        if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+            logger.info("Generating self-signed SSL certificate for HTTPS (mobile camera support)...")
+            try:
+                from scripts.gen_ssl_cert import gen_cert
+                cert_path, key_path = gen_cert(out_dir=cert_dir)
+                logger.info(f"SSL cert ready at: {cert_path}")
+            except Exception as e:
+                logger.warning(f"SSL cert generation failed ({e}). Falling back to HTTP.")
+                cert_path = key_path = None
+        else:
+            logger.info(f"Using existing SSL cert: {cert_path}")
+        ssl_certfile = cert_path
+        ssl_keyfile  = key_path
 
     # Import after arg parse to avoid slow import on --help
     from interface.bridge import AuraBridge
@@ -143,8 +174,23 @@ def main():
         splash.update_step(0.85, "SYNCHRONIZING WEBSOCKET TELEMETRY CHANNELS...")
 
     def open_browser_and_dismiss_splash():
-        url = f"http://localhost:{args.port}"
+        scheme = "https" if ssl_certfile else "http"
+        url = f"{scheme}://localhost:{args.port}"
         logger.info(f"Opening dashboard at {url}")
+        if ssl_certfile:
+            import socket
+            try:
+                hostname = socket.gethostname()
+                ips = [i[4][0] for i in socket.getaddrinfo(hostname, None)
+                       if ':' not in i[4][0] and not i[4][0].startswith('127.')]
+                if ips:
+                    logger.info("═" * 55)
+                    logger.info("  📱 REMOTE CAMERA — open this URL on your phone:")
+                    logger.info(f"  ➡  https://{ips[0]}:{args.port}/remote-camera")
+                    logger.info("  (Accept the self-signed cert warning on the phone)")
+                    logger.info("═" * 55)
+            except Exception:
+                pass
         if splash:
             splash.update_step(1.00, "SYSTEM READY // LAUNCHING COCKPIT...")
         webbrowser.open(url)
@@ -160,7 +206,8 @@ def main():
 
     # Start the web server (blocking)
     try:
-        run_server(bridge, host=args.host, port=args.port)
+        run_server(bridge, host=args.host, port=args.port,
+                   ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile)
     except KeyboardInterrupt:
         logger.info("Shutting down...")
     finally:
