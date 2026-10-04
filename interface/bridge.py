@@ -634,9 +634,9 @@ class AuraBridge:
             har_conf_val = 0.0
             if self._enable_har and self.har_engine is not None and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY:
                 try:
-                    annotated, har_activity_val, har_conf_val = self.har_engine.process_frame(annotated)
+                    annotated, har_activity_val, har_conf_val = self.har_engine.process_frame(annotated, draw_overlay=False)
                 except Exception as e:
-                    logger.debug(f"Dashboard HAR processing error: {e}")
+                    logger.warning(f"Dashboard HAR processing error: {e}")
 
             # 10. Encode to JPEG
             _, jpeg_buf = cv2.imencode(

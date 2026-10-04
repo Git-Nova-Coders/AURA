@@ -761,7 +761,7 @@ def run_pipeline(
             har_conf = 0.0
             if har_engine is not None:
                 try:
-                    annotated_frame, har_act, har_conf = har_engine.process_frame(annotated_frame)
+                    _, har_act, har_conf = har_engine.process_frame(annotated_frame, draw_overlay=False)
                 except Exception as e:
                     logger.debug(f"HAR frame processing error: {e}")
 

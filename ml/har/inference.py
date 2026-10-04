@@ -90,14 +90,14 @@ class RealTimeHARInference:
         self.last_activity = "Initializing..."
         self.last_confidence = 0.0
 
-    def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, str, float]:
+    def process_frame(self, frame: np.ndarray, draw_overlay: bool = True) -> Tuple[np.ndarray, str, float]:
         """
         Processes single camera frame:
         - Detects pose
         - Normalizes landmarks
         - Appends to rolling buffer
         - Runs model inference if buffer is full
-        - Overlays HUD
+        - Optionally overlays HUD
         """
         h, w = frame.shape[:2]
         pose_data = self.detector.process_frame(frame)
@@ -127,7 +127,10 @@ class RealTimeHARInference:
                     self.last_activity = "Uncertain"
                     self.last_confidence = best_conf
 
-        # Render HUD Overlay
+        if not draw_overlay:
+            return frame, self.last_activity, self.last_confidence
+
+        # Render HUD Overlay for standalone CLI mode
         annotated = frame.copy()
         # Header banner
         cv2.rectangle(annotated, (20, 20), (450, 95), (15, 15, 20), -1)
