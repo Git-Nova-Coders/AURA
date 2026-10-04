@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { soundFX } from '../utils/audioFx';
 
 /**
@@ -52,9 +53,6 @@ export default function RemoteCameraModal({
   const effectivePort = port ? `:${port}` : '';
   const protocol = window.location.protocol;
   const remoteUrl = `${protocol}//${selectedIp}${effectivePort}/remote-camera`;
-
-  // Dynamic QR code API URL (high reliability)
-  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(remoteUrl)}&bgcolor=10-15-22&color=00-f0-ff&margin=6`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(remoteUrl);
@@ -139,15 +137,17 @@ export default function RemoteCameraModal({
             {/* QR Code Column */}
             <div className="remote-qr-box">
               <div className="qr-frame">
-                <img
-                  src={qrApiUrl}
-                  alt="Remote Camera QR Code"
-                  className="qr-image"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-                <span className="qr-scan-guide">SCAN WITH PHONE CAMERA</span>
+                <div className="qr-white-card">
+                  <QRCodeSVG
+                    value={remoteUrl}
+                    size={200}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="M"
+                    includeMargin={true}
+                  />
+                </div>
+                <span className="qr-scan-guide">⚡ SCAN WITH PHONE CAMERA</span>
               </div>
             </div>
 
