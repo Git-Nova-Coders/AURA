@@ -116,29 +116,125 @@ class RealTimeHARInference:
             # Check dynamic kinematics / motion velocity across recent frames
             # seq_arr contains normalized coordinates (x, y, z, vis) for 33 joints
             diffs = np.diff(seq_arr[-10:, :, :3], axis=0)  # last 10 frames motion
-            joint_velocity = np.mean(np.linalg.norm(diffs, axis=-1))
+            joint_velocity = float(np.mean(np.linalg.norm(diffs, axis=-1)))
 
             if not pose_data.detected:
                 self.last_activity = "STANDBY (NO POSE)"
                 self.last_confidence = 0.0
-            elif joint_velocity < 0.035:
-                # User is standing still / resting in camera view
-                self.last_activity = "STANDBY / RESTING"
-                self.last_confidence = 0.95
             else:
-                tensor_seq = torch.from_numpy(seq_arr).unsqueeze(0).to(self.device)  # (1, 30, 33, 4)
+                lm = pose_data.landmarks  # shape: (33, 4) with normalized [x, y, z, vis]
+                # Key landmarks
+                nose = lm[0]
+                l_sh, r_sh = lm[11], lm[12]
+                l_el, r_el = lm[13], lm[14]
+                l_wr, r_wr = lm[15], lm[16]
+                l_hip, r_hip = lm[23], lm[24]
+                l_knee, r_knee = lm[25], lm[26]
+                l_ank, r_ank = lm[27], lm[28]
+
+                mid_sh_y = (l_sh[1] + r_sh[1]) / 2.0
+                mid_hip_y = (l_hip[1] + r_hip[1]) / 2.0
+                mid_knee_y = (l_knee[1] + r_knee[1]) / 2.0
+                mid_ank_y = (l_ank[1] + r_ank[1]) / 2.0
+
+                torso_len = abs(mid_hip_y - mid_sh_y) + 1e-5
+                thigh_len = abs(mid_knee_y - mid_hip_y)
+
+                # Angles calculation
+                def angle_2d(a, b, c):
+                    ba = a[:2] - b[:2]
+                    bc = c[:2] - b[:2]
+                    n1 = np.linalg.norm(ba)
+                    n2 = np.linalg.norm(bc)
+                    if n1 < 1e-5 or n2 < 1e-5:
+                        return 180.0
+                    cos = np.dot(ba, bc) / (n1 * n2)
+                    return float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0))))
+
+                l_knee_ang = angle_2d(l_hip, l_knee, l_ank)
+                r_knee_ang = angle_2d(r_hip, r_knee, r_ank)
+                avg_knee_ang = (l_knee_ang + r_knee_ang) / 2.0
+
+                # Arms velocity for waving
+                wrist_diffs = np.diff(seq_arr[-15:, [15, 16], :2], axis=0)
+                wrist_velocity = float(np.mean(np.linalg.norm(wrist_diffs, axis=-1)))
+
+                # Feet / Leg velocity for walking & running
+                leg_diffs = np.diff(seq_arr[-10:, [25, 26, 27, 28], :2], axis=0)
+                leg_velocity = float(np.mean(np.linalg.norm(leg_diffs, axis=-1)))
+
+                # Vertical velocity of hips for jumping
+                hip_y_diffs = np.diff(seq_arr[-10:, [23, 24], 1], axis=0)
+                vertical_velocity = float(np.max(np.abs(hip_y_diffs)))
+
+                # 1. Run Trained Deep Learning CNN+LSTM Model
+                tensor_seq = torch.from_numpy(seq_arr).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     logits = self.model(tensor_seq)
                     probs = F.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
                     best_idx = int(np.argmax(probs))
                     best_conf = float(probs[best_idx])
+                    ml_cls = self.classes[best_idx]
 
-                    if best_conf >= self.confidence_threshold:
-                        self.last_activity = self.classes[best_idx]
-                        self.last_confidence = best_conf
-                    else:
-                        self.last_activity = "ACTIVE (UNCERTAIN)"
-                        self.last_confidence = best_conf
+                class_map = {
+                    "BodyWeightSquats": "Squatting",
+                    "PushUps": "Push-ups",
+                    "WallPushups": "Push-ups",
+                    "JumpRope": "Jumping",
+                    "JumpingJack": "Jumping",
+                    "Lunges": "Walking",
+                    "Punch": "Waving",
+                    "TaiChi": "Standing",
+                }
+                mapped_ml_act = class_map.get(ml_cls, ml_cls)
+
+                # 2. Key Dynamic Motion & Posture Checks
+                wrist_above_shoulder = (l_wr[1] < l_sh[1] and l_wr[3] > 0.35) or (r_wr[1] < r_sh[1] and r_wr[3] > 0.35)
+                is_horizontal = (abs(mid_sh_y - mid_hip_y) < 0.22 and mid_sh_y > 0.35)
+
+                if wrist_above_shoulder and wrist_velocity > 0.038:
+                    self.last_activity = "Waving"
+                    self.last_confidence = min(0.98, 0.78 + wrist_velocity * 4.0)
+
+                elif is_horizontal and (ml_cls in ("PushUps", "WallPushups") or joint_velocity > 0.02):
+                    self.last_activity = "Push-ups"
+                    self.last_confidence = max(0.92, best_conf)
+
+                elif (best_conf >= self.confidence_threshold and mapped_ml_act in ("Squatting", "Jumping") and joint_velocity > 0.04):
+                    # High confidence dynamic exercise detected by CNN-LSTM
+                    self.last_activity = mapped_ml_act
+                    self.last_confidence = best_conf
+
+                elif vertical_velocity > 0.055 and joint_velocity > 0.05:
+                    self.last_activity = "Jumping"
+                    self.last_confidence = min(0.97, 0.82 + vertical_velocity * 2.5)
+
+                elif avg_knee_ang < 130.0 and joint_velocity > 0.03:
+                    self.last_activity = "Squatting"
+                    self.last_confidence = min(0.96, 0.85 + (130.0 - avg_knee_ang) / 100.0)
+
+                elif (abs(mid_hip_y - mid_knee_y) < torso_len * 0.45 and joint_velocity < 0.035 and mid_hip_y > 0.35):
+                    self.last_activity = "Sitting"
+                    self.last_confidence = 0.94
+
+                elif leg_velocity > 0.070:
+                    self.last_activity = "Running"
+                    self.last_confidence = min(0.96, 0.80 + leg_velocity * 2.0)
+
+                elif leg_velocity > 0.028:
+                    self.last_activity = "Walking"
+                    self.last_confidence = min(0.94, 0.78 + leg_velocity * 3.0)
+
+                elif joint_velocity < 0.032 and avg_knee_ang > 145.0:
+                    self.last_activity = "Standing"
+                    self.last_confidence = 0.95
+
+                elif best_conf >= self.confidence_threshold:
+                    self.last_activity = mapped_ml_act
+                    self.last_confidence = best_conf
+                else:
+                    self.last_activity = "Standing"
+                    self.last_confidence = 0.85
 
         annotated = frame.copy()
         if pose_data.detected:
