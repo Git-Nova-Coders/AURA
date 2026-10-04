@@ -111,20 +111,28 @@ def run_server(
     host: str = "0.0.0.0",
     port: int = 8420,
     log_level: str = "info",
+    ssl_certfile: Optional[str] = None,
+    ssl_keyfile: Optional[str] = None,
 ) -> None:
     """
     Starts the AURA web server with uvicorn.
 
     Args:
-        bridge: AuraBridge instance connecting to the vision pipeline.
-        host: Bind address. Default: 0.0.0.0.
-        port: Server port. Default: 8420.
-        log_level: Logging level for uvicorn.
+        bridge:       AuraBridge instance connecting to the vision pipeline.
+        host:         Bind address. Default: 0.0.0.0.
+        port:         Server port. Default: 8420.
+        log_level:    Logging level for uvicorn.
+        ssl_certfile: Path to PEM certificate file for HTTPS. If None, HTTP is used.
+        ssl_keyfile:  Path to PEM private key file for HTTPS.
     """
     import uvicorn
 
     app = create_app(bridge)
-    logger.info(f"Starting AURA Dashboard at http://{host}:{port}")
+    scheme = "https" if ssl_certfile else "http"
+    logger.info(f"Starting AURA Dashboard at {scheme}://{host}:{port}")
+    if ssl_certfile:
+        logger.info("  HTTPS enabled — mobile cameras will work without Chrome flags")
+        logger.info(f"  Cert: {ssl_certfile}")
 
     uvicorn.run(
         app,
@@ -132,4 +140,7 @@ def run_server(
         port=port,
         log_level=log_level,
         access_log=False,
+        ssl_certfile=ssl_certfile or None,
+        ssl_keyfile=ssl_keyfile or None,
     )
+
