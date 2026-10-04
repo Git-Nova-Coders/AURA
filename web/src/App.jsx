@@ -175,6 +175,7 @@ export default function App() {
           onToggleOCR={ws.toggleOCR}
           onToggleVoice={ws.toggleVoice}
           onToggleGestures={ws.toggleGestures}
+          onToggleHAR={ws.toggleHAR}
           onCycleTargetFilter={ws.cycleTargetFilter}
           onSetTargetFilter={ws.setTargetFilter}
         />

@@ -10,6 +10,7 @@ export default function TelemetryPanel({
   onToggleTracking,
   onToggleOCR,
   onToggleVoice,
+  onToggleHAR,
 }) {
   if (!telemetry) {
     return (
@@ -28,6 +29,7 @@ export default function TelemetryPanel({
   const isTracking = telemetry.tracking_enabled ?? true;
   const isOCR = telemetry.ocr_enabled ?? true;
   const isVoice = telemetry.voice_listening || telemetry.voice_status === 'LISTENING';
+  const isHAR = telemetry.har_enabled ?? true;
 
   return (
     <div className="control-deck glass-card">
@@ -125,6 +127,16 @@ export default function TelemetryPanel({
             <div className="switch-info">
               <span className="switch-name">🤙 Voice Assistant</span>
               <span className="switch-status">{isVoice ? 'LISTENING' : 'PAUSED'}</span>
+            </div>
+          </label>
+
+          {/* HAR Switch */}
+          <label className="cyber-switch" title="Toggle Human Activity Recognition (HAR) Engine">
+            <input type="checkbox" checked={isHAR} onChange={onToggleHAR} id="switch-har" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🏃 HAR Motion</span>
+              <span className="switch-status">{isHAR ? 'ACTIVE' : 'OFF'}</span>
             </div>
           </label>
         </div>

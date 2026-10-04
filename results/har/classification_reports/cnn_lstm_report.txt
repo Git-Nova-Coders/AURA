@@ -1,0 +1,15 @@
+=== Hybrid CNN + LSTM Classification Report ===
+
+                  precision    recall  f1-score   support
+
+BodyWeightSquats     1.0000    1.0000    1.0000        12
+        JumpRope     1.0000    1.0000    1.0000        16
+     JumpingJack     1.0000    1.0000    1.0000        13
+          Lunges     1.0000    0.9231    0.9600        13
+         PushUps     1.0000    1.0000    1.0000        11
+          TaiChi     0.9167    1.0000    0.9565        11
+     WallPushups     1.0000    1.0000    1.0000         2
+
+        accuracy                         0.9872        78
+       macro avg     0.9881    0.9890    0.9881        78
+    weighted avg     0.9882    0.9872    0.9872        78

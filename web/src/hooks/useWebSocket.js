@@ -164,6 +164,14 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'set_gestures', enabled });
   }, [sendMessage]);
 
+  const toggleHAR = useCallback(() => {
+    sendMessage({ type: 'toggle_har' });
+  }, [sendMessage]);
+
+  const setHAR = useCallback((enabled) => {
+    sendMessage({ type: 'set_har', enabled });
+  }, [sendMessage]);
+
   const setTargetFilter = useCallback((mode) => {
     sendMessage({ type: 'set_target_filter', mode });
   }, [sendMessage]);
@@ -200,6 +208,8 @@ export function useWebSocket(url = null) {
     toggleVoice,
     toggleGestures,
     setGestures,
+    toggleHAR,
+    setHAR,
     setTargetFilter,
     cycleTargetFilter,
     sendMessage,

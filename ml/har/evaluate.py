@@ -24,7 +24,6 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive headless backend
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -38,25 +37,31 @@ DATA_DIR = PROJECT_ROOT / "data" / "har" / "processed"
 
 
 def plot_confusion_matrix(cm: np.ndarray, classes: List[str], model_name: str, save_path: Path):
-    """Generates a styled confusion matrix plot."""
-    plt.figure(figsize=(8, 6))
+    """Generates a styled confusion matrix plot using pure matplotlib."""
+    plt.figure(figsize=(9, 7))
     cm_norm = cm.astype("float") / (cm.sum(axis=1)[:, np.newaxis] + 1e-9)
-    sns.heatmap(
-        cm_norm,
-        annot=True,
-        fmt=".2f",
-        cmap="Blues",
-        xticklabels=classes,
-        yticklabels=classes,
-        cbar=True
-    )
-    plt.title(f"Normalized Confusion Matrix - {model_name}", fontsize=12, pad=12)
-    plt.ylabel("Ground Truth Label", fontsize=10)
-    plt.xlabel("Predicted Label", fontsize=10)
-    plt.xticks(rotation=45, ha="right", fontsize=9)
-    plt.yticks(rotation=0, fontsize=9)
+
+    im = plt.imshow(cm_norm, interpolation="nearest", cmap="Blues")
+    plt.title(f"Normalized Confusion Matrix — {model_name}", fontsize=13, pad=14, fontweight="bold")
+    plt.colorbar(im, fraction=0.046, pad=0.04)
+
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45, ha="right", fontsize=9)
+    plt.yticks(tick_marks, classes, fontsize=9)
+
+    # Annotate cells with values
+    thresh = cm_norm.max() / 2.0
+    for i in range(cm_norm.shape[0]):
+        for j in range(cm_norm.shape[1]):
+            val = cm_norm[i, j]
+            color = "white" if val > thresh else "black"
+            text = f"{val:.2f}\n({cm[i, j]})" if cm[i, j] > 0 else "0.00"
+            plt.text(j, i, text, ha="center", va="center", color=color, fontsize=8)
+
+    plt.ylabel("Ground Truth Class", fontsize=11, fontweight="bold")
+    plt.xlabel("Predicted Class", fontsize=11, fontweight="bold")
     plt.tight_layout()
-    plt.savefig(save_path, dpi=200)
+    plt.savefig(save_path, dpi=250)
     plt.close()
 
 
@@ -132,6 +137,8 @@ def generate_unified_evaluation():
         ("Hybrid CNN + LSTM", RESULTS_DIR / "cnn_lstm_results.json", "cnn_lstm"),
     ]
 
+    from sklearn.metrics import classification_report
+
     for model_title, res_path, key in dl_models:
         if res_path.exists():
             with open(res_path, "r") as f:
@@ -152,6 +159,26 @@ def generate_unified_evaluation():
 
             if "history" in res:
                 plot_training_curves(res["history"], model_title, curves_dir / f"{key}_training_curve.png")
+
+            # Generate and export per-class classification report
+            if "y_true" in res and "y_pred" in res:
+                unique_labels = sorted(list(set(res["y_true"] + res["y_pred"])))
+                target_names = [classes[idx] for idx in unique_labels]
+
+                rep_dict = classification_report(
+                    res["y_true"], res["y_pred"], labels=unique_labels, target_names=target_names, output_dict=True, zero_division=0
+                )
+                rep_txt = classification_report(
+                    res["y_true"], res["y_pred"], labels=unique_labels, target_names=target_names, digits=4, zero_division=0
+                )
+
+                txt_path = reports_dir / f"{key}_report.txt"
+                json_path = reports_dir / f"{key}_report.json"
+                with open(txt_path, "w", encoding="utf-8") as tf:
+                    tf.write(f"=== {model_title} Classification Report ===\n\n{rep_txt}")
+                with open(json_path, "w", encoding="utf-8") as jf:
+                    json.dump(rep_dict, jf, indent=2)
+                logger.info(f"Generated per-class classification report: {txt_path}")
 
     # Generate master comparison table
     df = pd.DataFrame(records)

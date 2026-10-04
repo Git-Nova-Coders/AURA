@@ -558,6 +558,7 @@ def run_pipeline(
 
     last_ocr_texts: List[TextDetection] = []
     tracking_active = not no_track
+    har_active = enable_har
 
     # --- Decoupled Real-Time Inference Threading Setup ---
     use_async = (not sync_mode) and (not use_synthetic) and (not benchmark)
@@ -759,7 +760,7 @@ def run_pipeline(
             # 10b. Human Activity Recognition (HAR)
             har_act = None
             har_conf = 0.0
-            if har_engine is not None:
+            if har_active and har_engine is not None:
                 try:
                     annotated_frame, har_act, har_conf = har_engine.process_frame(annotated_frame, draw_overlay=False)
                 except Exception as e:
@@ -884,6 +885,18 @@ def run_pipeline(
                     logger.info(f"Extracted {len(last_ocr_texts)} text instances:")
                     for td in last_ocr_texts:
                         print(f"   - '{td.text}' ({int(td.confidence * 100)}% conf) at {td.bbox}")
+                elif key in (ord('a'), ord('A')):
+                    har_active = not har_active
+                    state_str = "ENABLED" if har_active else "DISABLED"
+                    logger.info(f"HAR Activity Recognition toggled: {state_str}")
+                    if gesture_controller:
+                        gesture_controller.trigger_toast(f"🏃 HAR {state_str}", duration=1.8)
+                    if har_active and har_engine is None:
+                        try:
+                            from ml.har.inference import RealTimeHARInference
+                            har_engine = RealTimeHARInference()
+                        except Exception as e:
+                            logger.warning(f"Could not load HAR engine: {e}")
                 elif key in (ord('s'), ord('S')):
                     filename = f"aura_capture_{int(time.time())}.jpg"
                     cv2.imwrite(filename, annotated_frame)

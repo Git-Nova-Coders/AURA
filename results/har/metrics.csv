@@ -1,0 +1,2 @@
+Model,Accuracy (%),Macro Precision (%),Macro Recall (%),Macro F1 (%),Weighted F1 (%),Architecture
+Hybrid CNN + LSTM,98.72,98.81,98.9,98.81,98.72,Hybrid CNN + LSTM

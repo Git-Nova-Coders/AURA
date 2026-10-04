@@ -14,6 +14,7 @@ export default function TacticalDeck({
   onToggleOCR,
   onToggleVoice,
   onToggleGestures,
+  onToggleHAR,
   onCycleTargetFilter,
   onSetTargetFilter,
 }) {
@@ -22,6 +23,7 @@ export default function TacticalDeck({
   const isOCR = telemetry?.ocr_enabled ?? true;
   const isGestures = telemetry?.gestures_enabled ?? false;
   const isVoice = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
+  const isHAR = telemetry?.har_enabled ?? true;
 
   const [localFilterMode, setLocalFilterMode] = useState(
     propFilterMode || telemetry?.target_filter_mode || 'ALL'
@@ -109,6 +111,7 @@ export default function TacticalDeck({
         <div className="v2-dock-mini-leds">
           <span className={`mini-led ${isPerceptionActive ? 'led-cyan' : 'led-off'}`} title="Perception" />
           <span className={`mini-led ${isGestures ? 'led-emerald' : 'led-off'}`} title="Gestures" />
+          <span className={`mini-led ${isHAR ? 'led-emerald' : 'led-off'}`} title="HAR Motion" />
           <span className={`mini-led ${isSAHI ? 'led-emerald' : 'led-off'}`} title="SAHI" />
           <span className={`mini-led ${isTracking ? 'led-cyan' : 'led-off'}`} title="Tracking" />
           <span className={`mini-led ${isOCR ? 'led-cyan' : 'led-off'}`} title="OCR" />
@@ -228,6 +231,25 @@ export default function TacticalDeck({
             <div className="pod-meta">
               <span className="pod-title">NEURAL VOICE</span>
               <span className="pod-status">{isVoice ? 'LISTENING' : 'STANDBY'}</span>
+            </div>
+          </div>
+
+          {/* Pod 7: HAR Motion Recognition */}
+          <div
+            className={`v2-control-pod ${isHAR ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isHAR);
+              if (onToggleHAR) onToggleHAR();
+            }}
+            title="Toggle Human Activity Recognition (CNN-LSTM 33-Joint Engine)"
+          >
+            <div className="pod-radial-ring ring-cyan">
+              <span className="pod-icon">🏃</span>
+            </div>
+            <div className="pod-meta">
+              <span className="pod-title">HAR MOTION</span>
+              <span className="pod-status">{isHAR ? 'RECOGNIZING' : 'MUTED'}</span>
             </div>
           </div>
         </div>

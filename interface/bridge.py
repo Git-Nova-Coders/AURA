@@ -81,6 +81,7 @@ class TelemetrySnapshot:
     tracking_enabled: bool = True
     ocr_enabled: bool = True
     gestures_enabled: bool = False
+    har_enabled: bool = True
     target_filter_mode: str = "ALL"
     voice_listening: bool = False
     ann_version: Optional[str] = None
@@ -108,6 +109,7 @@ class TelemetrySnapshot:
             "tracking_enabled": self.tracking_enabled,
             "ocr_enabled": self.ocr_enabled,
             "gestures_enabled": self.gestures_enabled,
+            "har_enabled": self.har_enabled,
             "target_filter_mode": self.target_filter_mode,
             "voice_listening": self.voice_listening,
             "ann_version": self.ann_version,
@@ -689,6 +691,7 @@ class AuraBridge:
                     tracking_enabled=self._tracking_enabled,
                     ocr_enabled=self._ocr_enabled,
                     gestures_enabled=self._gestures_enabled,
+                    har_enabled=self._enable_har,
                     target_filter_mode=self._target_filter_mode.value,
                     voice_listening=self._voice_listening,
                     ann_version=self.reliability_ann.model_version,
@@ -876,6 +879,8 @@ class AuraBridge:
                 self.har_engine = RealTimeHARInference()
             except Exception as e:
                 logger.warning(f"Could not load HAR engine: {e}")
+        with self._lock:
+            self._telemetry.har_enabled = self._enable_har
         return self._enable_har
 
     def set_har(self, enabled: bool) -> bool:
@@ -889,6 +894,8 @@ class AuraBridge:
                 self.har_engine = RealTimeHARInference()
             except Exception as e:
                 logger.warning(f"Could not load HAR engine: {e}")
+        with self._lock:
+            self._telemetry.har_enabled = self._enable_har
         return self._enable_har
 
     def toggle_tracking(self) -> bool:
@@ -1094,6 +1101,7 @@ class AuraBridge:
                 self.detector.sahi_config and self.detector.sahi_config.enabled
             ),
             "ocr_enabled": self._ocr_enabled,
+            "har_enabled": self._enable_har,
             "voice_listening": self._voice_listening,
             "rag_enabled": self._enable_rag,
             "memory_enabled": self._enable_memory,

@@ -30,6 +30,7 @@ class TestTelemetrySnapshot(unittest.TestCase):
         self.assertFalse(t.sahi_enabled)
         self.assertTrue(t.tracking_enabled)
         self.assertFalse(t.gestures_enabled)
+        self.assertTrue(t.har_enabled)
         self.assertEqual(t.target_filter_mode, "ALL")
 
     def test_to_dict(self):
@@ -44,6 +45,7 @@ class TestTelemetrySnapshot(unittest.TestCase):
             sahi_enabled=True,
             tracking_enabled=True,
             gestures_enabled=True,
+            har_enabled=True,
             target_filter_mode="OBJECTS_ONLY",
             ann_version="ann_v1",
             memory_enabled=True,
@@ -59,6 +61,7 @@ class TestTelemetrySnapshot(unittest.TestCase):
         self.assertTrue(d["sahi_enabled"])
         self.assertTrue(d["tracking_enabled"])
         self.assertTrue(d["gestures_enabled"])
+        self.assertTrue(d["har_enabled"])
         self.assertEqual(d["target_filter_mode"], "OBJECTS_ONLY")
         self.assertEqual(d["ann_version"], "ann_v1")
         self.assertTrue(d["memory_enabled"])
@@ -104,15 +107,17 @@ class TestAPIModels(unittest.TestCase):
 
     def test_config_update_request(self):
         from interface.api import ConfigUpdateRequest
-        req = ConfigUpdateRequest(sahi_enabled=True, tracking_enabled=False)
+        req = ConfigUpdateRequest(sahi_enabled=True, tracking_enabled=False, har_enabled=True)
         self.assertTrue(req.sahi_enabled)
         self.assertFalse(req.tracking_enabled)
+        self.assertTrue(req.har_enabled)
 
     def test_config_update_partial(self):
         from interface.api import ConfigUpdateRequest
         req = ConfigUpdateRequest(sahi_enabled=True)
         self.assertTrue(req.sahi_enabled)
         self.assertIsNone(req.tracking_enabled)
+        self.assertIsNone(req.har_enabled)
 
 
 class TestAPIBridgeIntegration(unittest.TestCase):
