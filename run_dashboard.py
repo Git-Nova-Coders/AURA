@@ -77,6 +77,10 @@ def parse_args():
         help="Disable OCR text extraction.",
     )
     parser.add_argument(
+        "--no-har", action="store_true",
+        help="Disable Human Activity Recognition (HAR) in web dashboard.",
+    )
+    parser.add_argument(
         "--llm", type=str, default="offline",
         help="LLM provider: offline, gemini, ollama, openai. Default: offline",
     )
@@ -123,6 +127,7 @@ def main():
             enable_rag=not args.no_rag,
             enable_memory=not args.no_memory,
             llm_provider=args.llm,
+            enable_har=not args.no_har,
         )
     except Exception as e:
         if splash:

@@ -91,6 +91,8 @@ class TelemetrySnapshot:
     pointed_target: Optional[str] = None
     pointed_target_bbox: Optional[List[float]] = None
     active_toast: Optional[str] = None
+    har_activity: Optional[str] = None
+    har_confidence: float = 0.0
     timestamp: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -116,6 +118,8 @@ class TelemetrySnapshot:
             "pointed_target": self.pointed_target,
             "pointed_target_bbox": self.pointed_target_bbox,
             "active_toast": self.active_toast,
+            "har_activity": self.har_activity,
+            "har_confidence": round(self.har_confidence, 2),
             "timestamp": round(self.timestamp, 2),
         }
 
@@ -150,10 +154,12 @@ class AuraBridge:
         memory_db: str = "data/memory.db",
         llm_provider: str = "offline",
         enable_gestures: bool = False,
+        enable_har: bool = True,
     ):
         self.source = source
         self.width = width
         self.height = height
+        self._enable_har = enable_har
 
         # Thread-safe state buffers
         self._lock = threading.Lock()
@@ -277,6 +283,17 @@ class AuraBridge:
             on_voice_trigger_callback=self.toggle_voice,
             on_deselect_callback=self.deselect_target,
         )
+
+        # Human Activity Recognition (HAR) Engine
+        self.har_engine = None
+        if self._enable_har:
+            try:
+                from ml.har.inference import RealTimeHARInference
+                logger.info("Initializing AURA Real-Time Human Activity Recognition (HAR) for Web Dashboard...")
+                self.har_engine = RealTimeHARInference()
+                logger.info("AURA HAR engine active in Web Dashboard.")
+            except Exception as e:
+                logger.warning(f"Could not initialize HAR engine in dashboard: {e}")
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
 
@@ -612,6 +629,15 @@ class AuraBridge:
             ):
                 annotated = draw_hand_skeleton(annotated, active_gesture)
 
+            # 9b. Human Activity Recognition (HAR) Engine
+            har_activity_val = None
+            har_conf_val = 0.0
+            if self._enable_har and self.har_engine is not None and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY:
+                try:
+                    annotated, har_activity_val, har_conf_val = self.har_engine.process_frame(annotated)
+                except Exception as e:
+                    logger.debug(f"Dashboard HAR processing error: {e}")
+
             # 10. Encode to JPEG
             _, jpeg_buf = cv2.imencode(
                 ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75],
@@ -672,6 +698,8 @@ class AuraBridge:
                     pointed_target=pointed_target.class_name if pointed_target else None,
                     pointed_target_bbox=target_bbox,
                     active_toast=toast_str,
+                    har_activity=har_activity_val,
+                    har_confidence=har_conf_val,
                 )
 
             frame_count += 1
@@ -835,6 +863,32 @@ class AuraBridge:
         with self._lock:
             self._telemetry.gestures_enabled = self._gestures_enabled
         return self._gestures_enabled
+
+    def toggle_har(self) -> bool:
+        """Toggles real-time Human Activity Recognition (HAR) on/off."""
+        self._enable_har = not self._enable_har
+        state_str = "ONLINE (ACTIVE)" if self._enable_har else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🏃 HAR ACTION RECOGNITION {state_str}", duration=1.8)
+        if self._enable_har and self.har_engine is None:
+            try:
+                from ml.har.inference import RealTimeHARInference
+                self.har_engine = RealTimeHARInference()
+            except Exception as e:
+                logger.warning(f"Could not load HAR engine: {e}")
+        return self._enable_har
+
+    def set_har(self, enabled: bool) -> bool:
+        """Explicitly sets real-time Human Activity Recognition (HAR) state."""
+        self._enable_har = enabled
+        state_str = "ONLINE (ACTIVE)" if self._enable_har else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🏃 HAR ACTION RECOGNITION {state_str}", duration=1.8)
+        if self._enable_har and self.har_engine is None:
+            try:
+                from ml.har.inference import RealTimeHARInference
+                self.har_engine = RealTimeHARInference()
+            except Exception as e:
+                logger.warning(f"Could not load HAR engine: {e}")
+        return self._enable_har
 
     def toggle_tracking(self) -> bool:
         """Toggles tracking on/off, updates telemetry synchronously, and returns new state."""

@@ -50,6 +50,7 @@ class ConfigUpdateRequest(BaseModel):
     ocr_enabled: Optional[bool] = None
     gestures_enabled: Optional[bool] = None
     target_filter_mode: Optional[str] = None
+    har_enabled: Optional[bool] = None
 
 
 # ── Endpoints ──
@@ -143,6 +144,7 @@ async def get_config():
         "tracking_enabled": bridge._tracking_enabled,
         "ocr_enabled": bridge._ocr_enabled,
         "gestures_enabled": bridge._gestures_enabled,
+        "har_enabled": bridge._enable_har,
         "target_filter_mode": bridge._target_filter_mode.value,
         "memory_enabled": bridge._enable_memory,
         "rag_enabled": bridge._enable_rag,
@@ -183,6 +185,13 @@ async def update_config(request: ConfigUpdateRequest):
             result["gestures_enabled"] = new_state
         else:
             result["gestures_enabled"] = bridge._gestures_enabled
+
+    if request.har_enabled is not None:
+        if request.har_enabled != bridge._enable_har:
+            new_state = bridge.set_har(request.har_enabled)
+            result["har_enabled"] = new_state
+        else:
+            result["har_enabled"] = bridge._enable_har
 
     if request.target_filter_mode is not None:
         new_mode = bridge.set_target_filter_mode(request.target_filter_mode)
