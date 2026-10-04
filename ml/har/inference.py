@@ -192,17 +192,18 @@ class RealTimeHARInference:
                 wrist_above_shoulder = (l_wr[1] < l_sh[1] and l_wr[3] > 0.35) or (r_wr[1] < r_sh[1] and r_wr[3] > 0.35)
                 is_horizontal = (abs(mid_sh_y - mid_hip_y) < 0.22 and mid_sh_y > 0.35)
 
-                if wrist_above_shoulder and wrist_velocity > 0.038:
+                # High confidence dynamic exercise detected by CNN-LSTM takes precedence
+                if best_conf >= 0.70 and mapped_ml_act in ("Squatting", "Jumping", "Push-ups") and joint_velocity > 0.035:
+                    self.last_activity = mapped_ml_act
+                    self.last_confidence = best_conf
+
+                elif wrist_above_shoulder and wrist_velocity > 0.038:
                     self.last_activity = "Waving"
                     self.last_confidence = min(0.98, 0.78 + wrist_velocity * 4.0)
 
                 elif is_horizontal and (ml_cls in ("PushUps", "WallPushups") or joint_velocity > 0.02):
                     self.last_activity = "Push-ups"
                     self.last_confidence = max(0.92, best_conf)
-
-                elif (best_conf >= self.confidence_threshold and mapped_ml_act in ("Squatting", "Jumping") and joint_velocity > 0.04):
-                    # High confidence dynamic exercise detected by CNN-LSTM
-                    self.last_activity = mapped_ml_act
                     self.last_confidence = best_conf
 
                 elif vertical_velocity > 0.055 and joint_velocity > 0.05:
