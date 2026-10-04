@@ -86,3 +86,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+
+# SSL Certificates (auto-generated per machine)
+# key.pem = private key: NEVER commit
+certs/key.pem
+certs/*.key
+# cert.pem is machine-specific; regenerated on first run via scripts/gen_ssl_cert.py
+certs/cert.pem
