@@ -243,6 +243,12 @@ def parse_args() -> argparse.Namespace:
         dest="gestures",
         help="Disable hand gesture interactive controls.",
     )
+    parser.add_argument(
+        "--har",
+        action="store_true",
+        default=False,
+        help="Enable Human Activity Recognition (HAR) live pose stream & action classification.",
+    )
     return parser.parse_args()
 
 
@@ -286,6 +292,8 @@ def draw_hud(
     gesture_mode: str = "ALL_OBJECTS",
     active_gesture: str = "none",
     last_subtitle: Optional[str] = None,
+    har_activity: Optional[str] = None,
+    har_conf: float = 0.0,
 ) -> np.ndarray:
     """Renders a sleek HUD status bar and bottom subtitle display."""
     h, w = image.shape[:2]
@@ -302,10 +310,11 @@ def draw_hud(
     ann_str = f" | ANN: {ann_version}" if ann_version else " | ANN: (Fallback)"
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
     gesture_badge = f" | 🖐️ {gesture_mode}" if gesture_mode != "ALL_OBJECTS" else ""
+    har_badge = f" | 🏃 HAR: {har_activity} ({har_conf*100:.0f}%)" if har_activity else ""
 
     hud_text = (
         f"AURA v0.8 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}{gesture_badge}"
+        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}{gesture_badge}{har_badge}"
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -377,6 +386,7 @@ def run_pipeline(
     memory_db: str = "data/memory.db",
     llm_provider: str = "offline",
     enable_gestures: bool = True,
+    enable_har: bool = False,
 ) -> int:
     """Main execution loop for AURA Milestone 8 (Vision + SAHI + Memory + RAG + Voice + Gestures)."""
     source_target = int(source_val) if source_val.isdigit() else source_val
@@ -498,6 +508,17 @@ def run_pipeline(
         on_voice_trigger_callback=on_voice_trigger,
     ) if enable_gestures else None
 
+    # 6b. Initialize Human Activity Recognition (HAR) Engine
+    har_engine = None
+    if enable_har:
+        try:
+            from ml.har.inference import RealTimeHARInference
+            logger.info("Initializing AURA Real-Time Human Activity Recognition (HAR) engine...")
+            har_engine = RealTimeHARInference()
+            logger.info("AURA HAR engine active.")
+        except Exception as e:
+            logger.warning(f"Could not initialize HAR engine: {e}. Running without HAR.")
+
     collector = DatasetCollector() if dataset_csv else None
 
     # 7. Initialize CameraAdapter
@@ -537,6 +558,7 @@ def run_pipeline(
 
     last_ocr_texts: List[TextDetection] = []
     tracking_active = not no_track
+    har_active = enable_har
 
     # --- Decoupled Real-Time Inference Threading Setup ---
     use_async = (not sync_mode) and (not use_synthetic) and (not benchmark)
@@ -735,6 +757,15 @@ def run_pipeline(
             if gesture_controller and gesture_controller.active_toast and time.time() < gesture_controller.toast_expiry_time:
                 annotated_frame = draw_action_toast(annotated_frame, gesture_controller.active_toast)
 
+            # 10b. Human Activity Recognition (HAR)
+            har_act = None
+            har_conf = 0.0
+            if har_active and har_engine is not None:
+                try:
+                    annotated_frame, har_act, har_conf = har_engine.process_frame(annotated_frame, draw_overlay=False)
+                except Exception as e:
+                    logger.debug(f"HAR frame processing error: {e}")
+
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
             ocr_count = len(current_ocr_texts) if ocr_engine is not None else -1
             v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
@@ -760,6 +791,8 @@ def run_pipeline(
                 gesture_mode=gesture_mode_val,
                 active_gesture=active_gesture_val,
                 last_subtitle=sub_text,
+                har_activity=har_act,
+                har_conf=har_conf,
             )
 
             frame_count += 1
@@ -852,6 +885,18 @@ def run_pipeline(
                     logger.info(f"Extracted {len(last_ocr_texts)} text instances:")
                     for td in last_ocr_texts:
                         print(f"   - '{td.text}' ({int(td.confidence * 100)}% conf) at {td.bbox}")
+                elif key in (ord('a'), ord('A')):
+                    har_active = not har_active
+                    state_str = "ENABLED" if har_active else "DISABLED"
+                    logger.info(f"HAR Activity Recognition toggled: {state_str}")
+                    if gesture_controller:
+                        gesture_controller.trigger_toast(f"🏃 HAR {state_str}", duration=1.8)
+                    if har_active and har_engine is None:
+                        try:
+                            from ml.har.inference import RealTimeHARInference
+                            har_engine = RealTimeHARInference()
+                        except Exception as e:
+                            logger.warning(f"Could not load HAR engine: {e}")
                 elif key in (ord('s'), ord('S')):
                     filename = f"aura_capture_{int(time.time())}.jpg"
                     cv2.imwrite(filename, annotated_frame)
@@ -926,6 +971,7 @@ def main():
         memory_db=args.memory_db,
         llm_provider=args.llm,
         enable_gestures=args.gestures,
+        enable_har=args.har,
     )
 
 

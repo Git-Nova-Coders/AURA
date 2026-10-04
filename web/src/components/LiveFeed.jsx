@@ -87,6 +87,11 @@ export default function LiveFeed({ frame, scene, telemetry, activeToast, onObjec
           {scene && (
             <span className="badge badge-cyan">{scene.entity_count || 0} Entities</span>
           )}
+          {telemetry?.har_activity && (
+            <span className="badge badge-emerald animate-pulse" title={`Confidence: ${Math.round((telemetry.har_confidence || 0) * 100)}%`}>
+              🏃 {telemetry.har_activity.toUpperCase()}
+            </span>
+          )}
           {telemetry?.ocr_text_count > 0 && (
             <span className="badge badge-emerald">{telemetry.ocr_text_count} OCR Texts</span>
           )}

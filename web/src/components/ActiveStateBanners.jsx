@@ -73,6 +73,15 @@ export default function ActiveStateBanners({ telemetry, activeToast }) {
             <span className="pill-label">TARGET LOCKED: {pointedTarget.toUpperCase()}</span>
           </div>
         )}
+
+        {/* HAR Active Motion Pill */}
+        {telemetry?.har_enabled && telemetry?.har_activity && (
+          <div className="status-pill status-pill-har animate-slide-in">
+            <span className="pill-dot emerald-pulse"></span>
+            <span className="pill-icon">🏃</span>
+            <span className="pill-label">HAR: {telemetry.har_activity.toUpperCase()} ({(telemetry.har_confidence * 100).toFixed(0)}%)</span>
+          </div>
+        )}
       </div>
     </>
   );
