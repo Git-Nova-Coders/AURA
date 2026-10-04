@@ -246,6 +246,13 @@ export default function TacticalViewport({
                 <span>🎯 TARGET LOCKED: {pointedTarget.toUpperCase()}</span>
               </div>
             )}
+
+            {telemetry?.har_activity && (
+              <div className="v2-pill v2-pill-emerald animate-slide-in" title={`Confidence: ${Math.round((telemetry.har_confidence || 0) * 100)}%`}>
+                <span className="v2-pulse-dot dot-cyan animate-pulse" />
+                <span>🏃 ACTION: {telemetry.har_activity.toUpperCase()} ({Math.round((telemetry.har_confidence || 0) * 100)}%)</span>
+              </div>
+            )}
           </div>
 
           {/* Main Video Stream Canvas */}

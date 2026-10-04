@@ -69,6 +69,13 @@ export default function HoloHeader({ isConnected, telemetry, onOpenGuide, onTrig
               {isOCR ? 'ONLINE' : 'STANDBY'}
             </span>
           </div>
+          <div className="v2-sub-item" title={telemetry?.har_activity ? `Action: ${telemetry.har_activity} (${Math.round((telemetry.har_confidence || 0) * 100)}%)` : 'Human Activity Recognition Active'}>
+            <span className={`v2-led ${telemetry?.har_activity ? 'led-cyan animate-pulse' : 'led-emerald'}`} />
+            <span className="v2-sub-label">HAR</span>
+            <span className={`v2-sub-val ${telemetry?.har_activity ? 'val-cyan font-bold' : 'val-emerald'}`}>
+              {telemetry?.har_activity ? telemetry.har_activity.toUpperCase() : 'ACTIVE'}
+            </span>
+          </div>
         </div>
 
         {/* Precision Numeric Telemetry */}
