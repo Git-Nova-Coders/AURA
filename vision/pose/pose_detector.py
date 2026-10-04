@@ -124,6 +124,11 @@ class PoseDetector:
             logger.error("MediaPipe PoseLandmarker initialization failed: %s", e)
             self._initialized = False
 
+    def reset(self) -> None:
+        """Resets the landmarker state (critical for VIDEO mode timestamps between different video files)."""
+        self.close()
+        self._init_detector()
+
     def process_frame(
         self,
         frame: np.ndarray,

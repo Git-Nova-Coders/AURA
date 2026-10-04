@@ -48,6 +48,9 @@ def extract_landmarks_from_video(
     if detector is None:
         detector = PoseDetector(running_mode="video")
         close_detector_after = True
+    else:
+        # Reset detector internal time sequence for new video
+        detector.reset()
 
     landmarks_list = []
     detected_mask_list = []
