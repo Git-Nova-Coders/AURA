@@ -61,6 +61,10 @@ models/*.json
 data/raw/
 data/processed/
 
+# HAR Dataset
+data/har/raw/
+data/har/processed/
+
 # Logs & Captures
 logs/
 *.log
