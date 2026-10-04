@@ -482,6 +482,7 @@ class AuraBridge:
                 # Scan OCR in background at 1.5s interval without blocking video stream
                 time.sleep(1.5)
 
+        # Always start async inference so remote frames are processed as soon as they arrive
         if not self._use_synthetic:
             infer_thread = threading.Thread(target=async_inference_worker, daemon=True, name="AURA_Async_Infer")
             infer_thread.start()
@@ -514,6 +515,40 @@ class AuraBridge:
                 with det_lock:
                     detections = self._apply_target_filter(list(current_camera_dets))
                 infer_latency_ms = last_infer_latency
+            elif active_source == "remote" and not remote_valid:
+                # Remote mode but phone hasn't sent a frame yet — show animated waiting screen
+                wait_img = np.zeros((480, 640, 3), dtype=np.uint8)
+                # Subtle grid
+                for gx in range(0, 640, 40):
+                    cv2.line(wait_img, (gx, 0), (gx, 480), (20, 20, 40), 1)
+                for gy in range(0, 480, 40):
+                    cv2.line(wait_img, (0, gy), (640, gy), (20, 20, 40), 1)
+                # Animated ring
+                ring_r = int(60 + 10 * np.sin(frame_count * 0.08))
+                cv2.circle(wait_img, (320, 210), ring_r, (0, 180, 255), 2)
+                cv2.circle(wait_img, (320, 210), ring_r - 15, (0, 80, 160), 1)
+                # Phone icon text
+                cv2.putText(wait_img, "REMOTE CAMERA", (210, 160),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
+                cv2.putText(wait_img, "LINKED — AWAITING STREAM", (140, 195),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 150, 220), 1)
+                # Animated dots
+                dots = "." * ((frame_count // 8 % 4))
+                cv2.putText(wait_img, f"Waiting for phone feed{dots}", (175, 260),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.52, (180, 180, 180), 1)
+                cv2.putText(wait_img, "Open  http://[IP]:8420/remote-camera  on phone", (68, 310),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 220, 100), 1)
+                cv2.putText(wait_img, "Then tap  \"START STREAMING\"", (190, 340),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 220, 100), 1)
+                cv2.putText(wait_img, "AURA // REMOTE SENSOR NODE STANDBY", (130, 460),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 60, 120), 1)
+                frame = Frame(
+                    image=wait_img,
+                    timestamp=time.time(),
+                    source_id="remote_waiting",
+                )
+                detections = []
+                infer_latency_ms = 0.0
             elif self._use_synthetic:
                 frame, raw_detections, synth_texts = self._create_synthetic_frame(frame_count)
                 if self._ocr_enabled:
