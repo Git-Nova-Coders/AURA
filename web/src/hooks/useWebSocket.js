@@ -172,6 +172,14 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'set_har', enabled });
   }, [sendMessage]);
 
+  const setCameraSource = useCallback((source) => {
+    sendMessage({ type: 'set_camera_source', source });
+  }, [sendMessage]);
+
+  const sendRemoteFrame = useCallback((frameData, deviceInfo) => {
+    sendMessage({ type: 'remote_frame', frame: frameData, device_info: deviceInfo });
+  }, [sendMessage]);
+
   const setTargetFilter = useCallback((mode) => {
     sendMessage({ type: 'set_target_filter', mode });
   }, [sendMessage]);
@@ -210,6 +218,8 @@ export function useWebSocket(url = null) {
     setGestures,
     toggleHAR,
     setHAR,
+    setCameraSource,
+    sendRemoteFrame,
     setTargetFilter,
     cycleTargetFilter,
     sendMessage,
