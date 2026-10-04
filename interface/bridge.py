@@ -37,6 +37,7 @@ from vision.gestures import (
     draw_hand_skeleton,
     draw_action_toast,
 )
+from vision.pose.pose_detector import draw_pose_skeleton
 
 from enum import Enum
 

@@ -29,6 +29,23 @@ POSE_LANDMARK_NAMES = [
     "left_foot_index", "right_foot_index"
 ]
 
+# 33 MediaPipe Pose Landmark Connections (Skeleton Bones)
+POSE_CONNECTIONS = [
+    # Face
+    (0, 1), (1, 2), (2, 3), (3, 7), (0, 4), (4, 5), (5, 6), (6, 8),
+    (9, 10),
+    # Torso
+    (11, 12), (11, 23), (12, 24), (23, 24),
+    # Left Arm
+    (11, 13), (13, 15), (15, 17), (15, 19), (15, 21), (17, 19),
+    # Right Arm
+    (12, 14), (14, 16), (16, 18), (16, 20), (16, 22), (18, 20),
+    # Left Leg
+    (23, 25), (25, 27), (27, 29), (27, 31), (29, 31),
+    # Right Leg
+    (24, 26), (26, 28), (28, 30), (28, 32), (30, 32),
+]
+
 NUM_LANDMARKS = 33
 LANDMARK_DIM = 4  # x, y, z, visibility
 TOTAL_FEATURE_DIM = NUM_LANDMARKS * LANDMARK_DIM  # 132
@@ -45,6 +62,55 @@ class PoseLandmarkData:
     def flat(self) -> np.ndarray:
         """Returns 1D feature array of length 132."""
         return self.landmarks.flatten()
+
+
+def draw_pose_skeleton(
+    image: np.ndarray,
+    landmarks: np.ndarray,
+    min_visibility: float = 0.35,
+    draw_bones: bool = True,
+    draw_nodes: bool = True,
+) -> np.ndarray:
+    """
+    Renders the futuristic 33-landmark cybernetic body skeleton over the video frame.
+    Connects head, shoulders, torso, arms, elbows, wrists, hips, knees, and ankles.
+    """
+    if image is None or landmarks is None or len(landmarks) < NUM_LANDMARKS:
+        return image
+
+    h, w = image.shape[:2]
+    pts = []
+    vis = []
+
+    for i in range(NUM_LANDMARKS):
+        lx, ly = landmarks[i, 0], landmarks[i, 1]
+        v = landmarks[i, 3] if landmarks.shape[1] > 3 else 1.0
+        px, py = int(lx * w), int(ly * h)
+        pts.append((px, py))
+        vis.append(v)
+
+    # 1. Draw Skeleton Bones
+    if draw_bones:
+        for idx1, idx2 in POSE_CONNECTIONS:
+            if idx1 < len(pts) and idx2 < len(pts):
+                if vis[idx1] >= min_visibility and vis[idx2] >= min_visibility:
+                    # Neon cyan glow bone lines
+                    cv2.line(image, pts[idx1], pts[idx2], (0, 240, 255), 2, cv2.LINE_AA)
+                    cv2.line(image, pts[idx1], pts[idx2], (0, 180, 200), 1, cv2.LINE_AA)
+
+    # 2. Draw Landmark Joint Nodes
+    if draw_nodes:
+        for i, pt in enumerate(pts):
+            if vis[i] >= min_visibility:
+                # Key joints: Head / Wrists / Ankles in Amber, others in Emerald
+                if i in (0, 15, 16, 27, 28):
+                    cv2.circle(image, pt, 5, (0, 255, 255), -1, cv2.LINE_AA)
+                    cv2.circle(image, pt, 8, (0, 200, 255), 1, cv2.LINE_AA)
+                else:
+                    cv2.circle(image, pt, 4, (0, 255, 120), -1, cv2.LINE_AA)
+                    cv2.circle(image, pt, 6, (0, 200, 100), 1, cv2.LINE_AA)
+
+    return image
 
 
 class PoseDetector:

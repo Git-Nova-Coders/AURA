@@ -17,6 +17,7 @@ def extract_landmarks_from_video(
     video_path: Path,
     detector: Optional[PoseDetector] = None,
     max_frames: Optional[int] = None,
+    frame_stride: int = 1,
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]]:
     """
     Extracts 33 pose landmarks for every frame of a video file.
@@ -25,6 +26,7 @@ def extract_landmarks_from_video(
         video_path: Path to the input video (.avi/.mp4).
         detector: Optional pre-initialized PoseDetector instance (reuses model).
         max_frames: Optional cap on frames to process (useful for quick debugging).
+        frame_stride: Sample every Nth frame (default 1 for full temporal resolution).
 
     Returns:
         landmarks: np.ndarray of shape (T, 33, 4) with [x, y, z, visibility]
@@ -56,6 +58,7 @@ def extract_landmarks_from_video(
     detected_mask_list = []
 
     frame_idx = 0
+    stride = max(1, int(frame_stride))
     try:
         while cap.isOpened():
             if max_frames is not None and frame_idx >= max_frames:
@@ -65,11 +68,12 @@ def extract_landmarks_from_video(
             if not ret:
                 break
 
-            timestamp_ms = int(frame_idx * (1000.0 / fps))
-            pose_data = detector.process_frame(frame, timestamp_ms=timestamp_ms)
+            if frame_idx % stride == 0:
+                timestamp_ms = int(frame_idx * (1000.0 / fps))
+                pose_data = detector.process_frame(frame, timestamp_ms=timestamp_ms)
 
-            landmarks_list.append(pose_data.landmarks)
-            detected_mask_list.append(pose_data.detected)
+                landmarks_list.append(pose_data.landmarks)
+                detected_mask_list.append(pose_data.detected)
 
             frame_idx += 1
     finally:

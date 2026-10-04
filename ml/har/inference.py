@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from vision.pose.pose_detector import PoseDetector
+from vision.pose.pose_detector import PoseDetector, draw_pose_skeleton
 from ml.har.preprocess import normalize_pose_frame, SEQUENCE_LENGTH
 from ml.har.models import HybridPoseCNNLSTM
 
@@ -112,26 +112,40 @@ class RealTimeHARInference:
         # Predict when buffer has full sequence
         if len(self.buffer) == self.sequence_length:
             seq_arr = np.array(self.buffer, dtype=np.float32)  # (30, 33, 4)
-            tensor_seq = torch.from_numpy(seq_arr).unsqueeze(0).to(self.device)  # (1, 30, 33, 4)
 
-            with torch.no_grad():
-                logits = self.model(tensor_seq)
-                probs = F.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
-                best_idx = int(np.argmax(probs))
-                best_conf = float(probs[best_idx])
+            # Check dynamic kinematics / motion velocity across recent frames
+            # seq_arr contains normalized coordinates (x, y, z, vis) for 33 joints
+            diffs = np.diff(seq_arr[-10:, :, :3], axis=0)  # last 10 frames motion
+            joint_velocity = np.mean(np.linalg.norm(diffs, axis=-1))
 
-                if best_conf >= self.confidence_threshold:
-                    self.last_activity = self.classes[best_idx]
-                    self.last_confidence = best_conf
-                else:
-                    self.last_activity = "Uncertain"
-                    self.last_confidence = best_conf
+            if not pose_data.detected:
+                self.last_activity = "STANDBY (NO POSE)"
+                self.last_confidence = 0.0
+            elif joint_velocity < 0.035:
+                # User is standing still / resting in camera view
+                self.last_activity = "STANDBY / RESTING"
+                self.last_confidence = 0.95
+            else:
+                tensor_seq = torch.from_numpy(seq_arr).unsqueeze(0).to(self.device)  # (1, 30, 33, 4)
+                with torch.no_grad():
+                    logits = self.model(tensor_seq)
+                    probs = F.softmax(logits, dim=-1).squeeze(0).cpu().numpy()
+                    best_idx = int(np.argmax(probs))
+                    best_conf = float(probs[best_idx])
+
+                    if best_conf >= self.confidence_threshold:
+                        self.last_activity = self.classes[best_idx]
+                        self.last_confidence = best_conf
+                    else:
+                        self.last_activity = "ACTIVE (UNCERTAIN)"
+                        self.last_confidence = best_conf
+
+        annotated = frame.copy()
+        if pose_data.detected:
+            annotated = draw_pose_skeleton(annotated, pose_data.landmarks)
 
         if not draw_overlay:
-            return frame, self.last_activity, self.last_confidence
-
-        # Render HUD Overlay for standalone CLI mode
-        annotated = frame.copy()
+            return annotated, self.last_activity, self.last_confidence
         # Header banner
         cv2.rectangle(annotated, (20, 20), (450, 95), (15, 15, 20), -1)
         cv2.rectangle(annotated, (20, 20), (450, 95), (0, 230, 255), 2)

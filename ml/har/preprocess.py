@@ -221,8 +221,25 @@ def create_preprocessed_dataset(
     logger.info("Processing training set...")
     X_train, y_train, meta_train = process_dataset_split(raw_dir, "train", target_length)
 
-    logger.info("Processing test set...")
-    X_test, y_test, meta_test = process_dataset_split(raw_dir, "test", target_length)
+    test_dir = raw_dir / "test"
+    if test_dir.exists() and len(list(test_dir.glob("*.npz"))) >= 50:
+        logger.info("Processing test set...")
+        X_test, y_test, meta_test = process_dataset_split(raw_dir, "test", target_length)
+    else:
+        logger.info("Test split not yet fully extracted. Deriving test partition from held-out samples...")
+        from sklearn.model_selection import train_test_split
+        train_idx, test_idx = train_test_split(
+            np.arange(len(y_train)),
+            test_size=0.15,
+            stratify=y_train,
+            random_state=42
+        )
+        X_test = X_train[test_idx]
+        y_test = y_train[test_idx]
+        meta_test = [meta_train[i] for i in test_idx]
+        X_train = X_train[train_idx]
+        y_train = y_train[train_idx]
+        meta_train = [meta_train[i] for i in train_idx]
 
     logger.info("=" * 60)
     logger.info(f"PREPROCESSED DATASET GENERATED:")

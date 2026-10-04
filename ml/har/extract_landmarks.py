@@ -149,7 +149,7 @@ def run_batch_extraction(split_number: int = 1, force_recompute: bool = False, m
 
                 t0 = time.time()
                 try:
-                    landmarks, mask, stats = extract_landmarks_from_video(v_path, detector=detector)
+                    landmarks, mask, stats = extract_landmarks_from_video(v_path, detector=detector, frame_stride=2)
                 except Exception as e:
                     logger.error(f"Error extracting {v_path.name}: {e}")
                     continue
