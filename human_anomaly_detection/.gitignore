@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
 
 # Datasets
 dataset/
@@ -28,8 +29,19 @@ results/
 logs/
 *.log
 
+# Presentations, documents & export files
+*.pptx
+*.ppt
+*.docx
+*.pdf
+generate_*.py
+presentation_*.py
+
 # IDE and OS files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# AI Agent Guides
+Human_Anomaly_Detection_*.md
