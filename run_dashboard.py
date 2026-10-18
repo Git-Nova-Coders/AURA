@@ -87,8 +87,9 @@ def parse_args():
         help="LLM provider: offline, gemini, ollama, openai. Default: offline",
     )
     parser.add_argument(
-        "--no-ssl", action="store_true",
-        help="Disable HTTPS (not recommended — mobile camera will be blocked by browser).",
+        "--ssl", action="store_true",
+        help="Enable HTTPS with a self-signed cert (needed for mobile camera on some phones). "
+             "Opens browser as https://. First visit requires clicking 'Advanced -> Proceed'.",
     )
     parser.add_argument(
         "--cert-dir", type=str, default="certs",
@@ -116,10 +117,10 @@ def main():
     if splash:
         splash.update_step(0.25, "LOADING NEURAL VISION & MODEL WEIGHTS...")
 
-    # ── SSL Certificate (auto-generate if missing) ─────────────────────────
+    # ── SSL Certificate (only if --ssl flag is passed) ────────────────────
     ssl_certfile = None
     ssl_keyfile = None
-    if not args.no_ssl:
+    if args.ssl:
         cert_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), args.cert_dir)
         cert_path = os.path.join(cert_dir, "cert.pem")
         key_path  = os.path.join(cert_dir, "key.pem")
@@ -128,7 +129,7 @@ def main():
             try:
                 from scripts.gen_ssl_cert import gen_cert
                 cert_path, key_path = gen_cert(out_dir=cert_dir)
-                logger.info(f"SSL cert ready at: {cert_path}")
+                logger.info(f"SSL cert ready: {cert_path}")
             except Exception as e:
                 logger.warning(f"SSL cert generation failed ({e}). Falling back to HTTP.")
                 cert_path = key_path = None
@@ -176,21 +177,23 @@ def main():
     def open_browser_and_dismiss_splash():
         scheme = "https" if ssl_certfile else "http"
         url = f"{scheme}://localhost:{args.port}"
-        logger.info(f"Opening dashboard at {url}")
-        if ssl_certfile:
+        logger.info("=" * 60)
+        logger.info(f"  ✓ AURA Dashboard  →  {url}")
+        # Print remote camera URL
+        try:
             import socket
-            try:
-                hostname = socket.gethostname()
-                ips = [i[4][0] for i in socket.getaddrinfo(hostname, None)
-                       if ':' not in i[4][0] and not i[4][0].startswith('127.')]
-                if ips:
-                    logger.info("═" * 55)
-                    logger.info("  📱 REMOTE CAMERA — open this URL on your phone:")
-                    logger.info(f"  ➡  https://{ips[0]}:{args.port}/remote-camera")
-                    logger.info("  (Accept the self-signed cert warning on the phone)")
-                    logger.info("═" * 55)
-            except Exception:
-                pass
+            hostname = socket.gethostname()
+            ips = [i[4][0] for i in socket.getaddrinfo(hostname, None)
+                   if ':' not in i[4][0] and not i[4][0].startswith('127.')]
+            if ips:
+                logger.info(f"  ✓ Remote Camera   →  {scheme}://{ips[0]}:{args.port}/remote-camera")
+                if not ssl_certfile:
+                    logger.info("    (Tip: use --ssl flag if phone camera is blocked by browser)")
+                else:
+                    logger.info("    (Accept the self-signed cert on first visit on your phone)")
+        except Exception:
+            pass
+        logger.info("=" * 60)
         if splash:
             splash.update_step(1.00, "SYSTEM READY // LAUNCHING COCKPIT...")
         webbrowser.open(url)
