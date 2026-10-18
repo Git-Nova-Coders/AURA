@@ -72,42 +72,74 @@ export default function TacticalViewport({
     img.src = `data:image/jpeg;base64,${frame}`;
   }, [frame]);
 
-  const handleCanvasClick = (e) => {
-    if (!scene?.entities?.length || !onObjectClick) return;
+  const getCanvasCoords = (e) => {
     const canvas = canvasRef.current;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvasSize.w / rect.width;
     const scaleY = canvasSize.h / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+    if (clientX === undefined && e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    }
+    if (clientX === undefined && e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    }
+    if (clientX === undefined || clientY === undefined) return null;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
 
+  const handleCanvasClick = (e) => {
+    if (!scene?.entities?.length || !onObjectClick) return;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+    const { x, y } = coords;
+
+    const candidates = [];
     for (const entity of scene.entities) {
       const [x1, y1, x2, y2] = entity.bbox;
       if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
-        soundFX.playLockOn();
-        onObjectClick(entity);
-        return;
+        const area = Math.abs((x2 - x1) * (y2 - y1));
+        candidates.push({ entity, area });
       }
+    }
+
+    if (candidates.length > 0) {
+      // Sort ascending by area so smaller nested objects (e.g. bottle inside person) are picked first
+      candidates.sort((a, b) => a.area - b.area);
+      const chosen = candidates[0].entity;
+      soundFX.playLockOn();
+      onObjectClick(chosen);
     }
   };
 
   const handleCanvasMove = (e) => {
     if (!scene?.entities?.length) { setHoveredEntity(null); return; }
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvasSize.w / rect.width;
-    const scaleY = canvasSize.h / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const coords = getCanvasCoords(e);
+    if (!coords) { setHoveredEntity(null); return; }
+    const { x, y } = coords;
 
+    const candidates = [];
     for (const entity of scene.entities) {
       const [x1, y1, x2, y2] = entity.bbox;
       if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
-        setHoveredEntity(entity);
-        return;
+        const area = Math.abs((x2 - x1) * (y2 - y1));
+        candidates.push({ entity, area });
       }
     }
-    setHoveredEntity(null);
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => a.area - b.area);
+      setHoveredEntity(candidates[0].entity);
+    } else {
+      setHoveredEntity(null);
+    }
   };
 
   const gestureIcons = {
@@ -268,6 +300,7 @@ export default function TacticalViewport({
               ref={canvasRef}
               className="v2-viewport-canvas"
               onClick={handleCanvasClick}
+              onTouchEnd={handleCanvasClick}
               onMouseMove={handleCanvasMove}
               onMouseLeave={() => setHoveredEntity(null)}
             />

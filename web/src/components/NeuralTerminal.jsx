@@ -183,6 +183,18 @@ export default function NeuralTerminal({
                     <span className={`flow-step ${reasoningStage >= 4 ? 'step-done' : ''}`}>GROUND ✓</span>
                   </div>
                 </div>
+                <button
+                  className="v2-btn-close-pipeline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    soundFX.playClick();
+                    if (onDeselectAll) onDeselectAll();
+                  }}
+                  title="Dismiss Neural Reasoning Pipeline"
+                  aria-label="Dismiss Neural Reasoning Pipeline"
+                >
+                  ✕
+                </button>
               </div>
 
               {/* Scrollable Dossier Cards */}

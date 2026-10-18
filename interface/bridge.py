@@ -1151,6 +1151,16 @@ class AuraBridge:
         elif target_name:
             target_str = target_name
 
+        # Enrich metadata from active scene entity if available
+        if target_str not in ("object", "entity"):
+            entity_match = self.context_manager.get_entity_by_class(target_str)
+            if entity_match:
+                target_str = entity_match.class_name
+                confidence = entity_match.confidence
+                spatial_pos = entity_match.spatial_pos
+                if entity_match.ocr_texts:
+                    ocr_texts = entity_match.ocr_texts
+
         # 2. Retrieve grounded encyclopedic knowledge
         k_item = self.knowledge_retriever.retrieve(target_str)
         k_title = k_item.title if k_item else target_str.capitalize()
@@ -1217,6 +1227,10 @@ class AuraBridge:
         with self._lock:
             if self._telemetry:
                 self._telemetry.pointed_target = None
+                self._telemetry.pointed_target_bbox = None
+                self._telemetry.gesture_mode = "ALL_OBJECTS"
+        if self.gesture_controller:
+            self.gesture_controller.reset()
         if self._event_broadcaster:
             try:
                 self._event_broadcaster({

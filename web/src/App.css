@@ -2909,6 +2909,34 @@
   overflow: hidden;
 }
 
+.v2-btn-close-pipeline {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 900;
+  background: rgba(255, 0, 85, 0.15);
+  border: 1px solid rgba(255, 0, 85, 0.5);
+  color: #ff6b8b;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: 0;
+  margin-left: auto;
+}
+
+.v2-btn-close-pipeline:hover {
+  background: var(--aura-red);
+  color: var(--aura-white);
+  border-color: var(--aura-red);
+  box-shadow: 0 0 12px var(--aura-red);
+  transform: scale(1.08);
+}
+
 .v2-reasoning-core-box {
   flex-shrink: 0;
   display: flex;

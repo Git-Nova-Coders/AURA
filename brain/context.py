@@ -397,9 +397,19 @@ class ContextManager:
         if not self.latest_scene or not self.latest_scene.entities:
             return None
         target = class_name.lower().strip()
-        for e in self.latest_scene.entities:
-            if e.class_name.lower() == target:
-                return e
+        # 1. Exact match (prefer smallest area if multiple)
+        exact_matches = [e for e in self.latest_scene.entities if e.class_name.lower() == target]
+        if exact_matches:
+            return sorted(exact_matches, key=lambda e: e.area)[0]
+
+        # 2. Substring / partial match (e.g., 'water bottle' <-> 'bottle')
+        partial_matches = [
+            e for e in self.latest_scene.entities
+            if target in e.class_name.lower() or e.class_name.lower() in target
+        ]
+        if partial_matches:
+            return sorted(partial_matches, key=lambda e: e.area)[0]
+
         return None
 
     def get_entity_by_track_id(self, track_id: int) -> Optional[ObjectEntity]:

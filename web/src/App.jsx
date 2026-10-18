@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import CyberBackground from './components/CyberBackground';
 import HoloHeader from './components/HoloHeader';
@@ -36,9 +36,11 @@ export default function App() {
   const isTrackingActive = ws.telemetry?.tracking_enabled ?? true;
 
   const [isPanelDismissed, setIsPanelDismissed] = useState(false);
+  const isManuallyClosedRef = useRef(false);
 
   // Handle entity selection via click or pinch gesture
   const handleSelectEntity = useCallback((entity) => {
+    isManuallyClosedRef.current = false;
     setIsPanelDismissed(false);
     setSelectedEntity(entity);
     ws.inspectEntity(entity.class_name);
@@ -47,6 +49,9 @@ export default function App() {
   // When inspectResponse arrives from pinch gesture or click, record to inspectHistory
   useEffect(() => {
     if (ws.inspectResponse) {
+      if (isManuallyClosedRef.current) {
+        return; // User explicitly dismissed pipeline; ignore stale incoming response
+      }
       setIsPanelDismissed(false);
       const targetName = ws.inspectResponse.target || selectedEntity?.class_name || 'OBJECT';
       const explanation = ws.inspectResponse.response?.response_text || 'Tactical analysis completed.';
@@ -79,6 +84,7 @@ export default function App() {
 
   // Deselect all inspected objects and dismiss intelligence layer
   const handleDeselectAll = useCallback(() => {
+    isManuallyClosedRef.current = true;
     setIsPanelDismissed(true);
     setSelectedEntity(null);
     setInspectHistory([]);
@@ -91,6 +97,7 @@ export default function App() {
       const updated = [...prev];
       updated.splice(index, 1);
       if (updated.length === 0) {
+        isManuallyClosedRef.current = true;
         setSelectedEntity(null);
         setIsPanelDismissed(true);
         if (ws.clearInspect) ws.clearInspect();
