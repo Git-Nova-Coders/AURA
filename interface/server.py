@@ -127,6 +127,26 @@ def run_server(
     """
     import uvicorn
 
+    import sys
+    if sys.platform == "win32":
+        import asyncio
+        try:
+            # Suppress harmless Windows ProactorEventLoop WinError 10054 on browser disconnect
+            loop = asyncio.new_event_loop()
+            orig_handler = loop.get_exception_handler()
+            def winerror_handler(loop, context):
+                exc = context.get("exception")
+                if isinstance(exc, ConnectionResetError) and getattr(exc, 'winerror', None) == 10054:
+                    return
+                if orig_handler:
+                    orig_handler(loop, context)
+                else:
+                    loop.default_exception_handler(context)
+            loop.set_exception_handler(winerror_handler)
+            asyncio.set_event_loop(loop)
+        except Exception:
+            pass
+
     app = create_app(bridge)
     scheme = "https" if ssl_certfile else "http"
     logger.info(f"Starting AURA Dashboard at {scheme}://{host}:{port}")
