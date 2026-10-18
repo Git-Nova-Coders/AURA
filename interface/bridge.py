@@ -628,9 +628,14 @@ class AuraBridge:
             if self._enable_memory and self.episodic_memory:
                 self.episodic_memory.record_scene(scene_context)
 
-            # 8. Hand Gesture Interactive Control (Only active when armed/enabled)
+            # 8. Hand Gesture Interactive Control (Only active when armed/enabled and not waving)
             raw_img = frame.image if isinstance(frame, Frame) else frame
-            if self._gestures_enabled:
+            is_waving = bool(
+                self._enable_har
+                and self.har_engine is not None
+                and getattr(self.har_engine, "last_activity", None) == "Waving"
+            )
+            if self._gestures_enabled and not is_waving:
                 (
                     visible_detections,
                     gesture_mode,
@@ -638,6 +643,8 @@ class AuraBridge:
                     pointed_target,
                 ) = self.gesture_controller.update(raw_img, detections)
             else:
+                if is_waving or not self._gestures_enabled:
+                    self.gesture_controller.reset()
                 visible_detections = detections
                 gesture_mode = GestureMode.ALL_OBJECTS
                 active_gesture = GestureResult()
@@ -738,8 +745,7 @@ class AuraBridge:
                 toast_str = (
                     self.gesture_controller.active_toast
                     if (
-                        self._gestures_enabled
-                        and self.gesture_controller.active_toast
+                        self.gesture_controller.active_toast
                         and time.time() < self.gesture_controller.toast_expiry_time
                     )
                     else None
@@ -924,19 +930,33 @@ class AuraBridge:
     def toggle_gestures(self) -> bool:
         """Toggles 3D hand gestures master armed state on/off, updates telemetry, and returns new state."""
         self._gestures_enabled = not self._gestures_enabled
+        if not self._gestures_enabled:
+            self.gesture_controller.reset()
         state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
         self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
         with self._lock:
             self._telemetry.gestures_enabled = self._gestures_enabled
+            if not self._gestures_enabled:
+                self._telemetry.gesture_mode = "ALL_OBJECTS"
+                self._telemetry.active_gesture = "none"
+                self._telemetry.pointed_target = None
+                self._telemetry.pointed_target_bbox = None
         return self._gestures_enabled
 
     def set_gestures(self, enabled: bool) -> bool:
         """Explicitly sets 3D hand gestures armed state and updates telemetry."""
         self._gestures_enabled = enabled
+        if not self._gestures_enabled:
+            self.gesture_controller.reset()
         state_str = "ARMED (ONLINE)" if self._gestures_enabled else "STANDBY (OFF)"
         self.gesture_controller.trigger_toast(f"🖐️ 3D GESTURES {state_str}", duration=1.8)
         with self._lock:
             self._telemetry.gestures_enabled = self._gestures_enabled
+            if not self._gestures_enabled:
+                self._telemetry.gesture_mode = "ALL_OBJECTS"
+                self._telemetry.active_gesture = "none"
+                self._telemetry.pointed_target = None
+                self._telemetry.pointed_target_bbox = None
         return self._gestures_enabled
 
     def toggle_har(self) -> bool:

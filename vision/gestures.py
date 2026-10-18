@@ -611,24 +611,44 @@ class GestureActionController:
         self.active_toast: Optional[str] = None
         self.toast_expiry_time: float = 0.0
 
-    def trigger_toast(self, text: str, duration: float = 2.0) -> None:
+    def reset(self) -> None:
+        """Resets all active gesture modes, frozen states, and targets to default."""
+        self.current_mode = GestureMode.ALL_OBJECTS
+        self.targeted_object = None
+        self.last_raw_gesture = GestureType.NONE
+        self.consecutive_gesture_count = 0
+        self.confirmed_gesture = GestureType.NONE
+        self.last_executed_gesture = GestureType.NONE
+        self.frozen_detections = []
+        self.smoothed_pointing_tip = None
+
+    def trigger_toast(self, text: str, duration: float = 2.0, is_gesture: bool = False) -> None:
         """Triggers a visible HUD action toast."""
         self.active_toast = text
         self.toast_expiry_time = time.time() + duration
-        logger.info(f"Gesture Action: {text}")
+        if is_gesture:
+            logger.info(f"Gesture Action: {text}")
+        else:
+            logger.info(f"System Action: {text}")
 
     def update(
         self,
         frame: np.ndarray,
         all_detections: List[Detection],
+        suppress_actions: bool = False,
     ) -> Tuple[List[Detection], GestureMode, GestureResult, Optional[Detection]]:
         """
         Executes MediaPipe 21-landmark tracking, classifies gestures,
         dispatches concrete actions (snapshots, inspections, mode toggles),
         and filters visible detections.
+
+        If suppress_actions is True (e.g. during waving activity or when gestures are disabled),
+        no gesture mode transitions, laser locking, or snapshots will be triggered.
         """
-        if frame is None or frame.size == 0:
-            return all_detections, self.current_mode, GestureResult(), None
+        if frame is None or frame.size == 0 or suppress_actions:
+            if suppress_actions:
+                self.reset()
+            return all_detections, GestureMode.ALL_OBJECTS, GestureResult(), None
 
         now = time.time()
 

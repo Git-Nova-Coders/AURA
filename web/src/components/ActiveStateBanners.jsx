@@ -7,12 +7,13 @@ import React from 'react';
 export default function ActiveStateBanners({ telemetry, activeToast }) {
   if (!telemetry && !activeToast) return null;
 
+  const isGestures = Boolean(telemetry?.gestures_enabled);
   const isSAHI = telemetry?.sahi_enabled;
   const isVoiceActive = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
-  const isFrozen = telemetry?.gesture_mode === 'FROZEN';
-  const isCleanView = telemetry?.gesture_mode === 'HIDE_BOXES';
-  const pointedTarget = telemetry?.pointed_target;
-  const isTargeting = telemetry?.gesture_mode === 'FOCUS_OBJECT' || telemetry?.gesture_mode === 'INSPECT_OBJECT';
+  const isFrozen = isGestures && telemetry?.gesture_mode === 'FROZEN';
+  const isCleanView = isGestures && telemetry?.gesture_mode === 'HIDE_BOXES';
+  const pointedTarget = isGestures ? telemetry?.pointed_target : null;
+  const isTargeting = isGestures && (telemetry?.gesture_mode === 'FOCUS_OBJECT' || telemetry?.gesture_mode === 'INSPECT_OBJECT');
 
   return (
     <>

@@ -30,10 +30,10 @@ export default function TacticalViewport({
   const isSAHI = telemetry?.sahi_enabled ?? false;
   const isGestures = telemetry?.gestures_enabled ?? false;
   const isVoice = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
-  const isClean = telemetry?.gesture_mode === 'HIDE_BOXES';
-  const isFrozen = telemetry?.gesture_mode === 'FROZEN';
-  const activeGesture = telemetry?.active_gesture || 'none';
-  const pointedTarget = telemetry?.pointed_target;
+  const isClean = isGestures && telemetry?.gesture_mode === 'HIDE_BOXES';
+  const isFrozen = isGestures && telemetry?.gesture_mode === 'FROZEN';
+  const activeGesture = isGestures ? (telemetry?.active_gesture || 'none') : 'none';
+  const pointedTarget = isGestures ? telemetry?.pointed_target : null;
   const filterMode = propFilterMode || telemetry?.target_filter_mode || 'ALL';
 
   // Sound and flash triggers
