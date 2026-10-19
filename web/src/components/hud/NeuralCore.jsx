@@ -49,7 +49,7 @@ export default function NeuralCore({
           cy={center}
           r={radius}
           fill="none"
-          stroke="rgba(0, 240, 255, 0.2)"
+          stroke="rgba(129, 140, 248, 0.2)"
           strokeWidth="1"
           strokeDasharray="4 6"
           className="orbit-ring-outer"
@@ -59,7 +59,7 @@ export default function NeuralCore({
           cy={center}
           r={radius * 0.75}
           fill="none"
-          stroke="rgba(0, 240, 255, 0.35)"
+          stroke="rgba(168, 85, 247, 0.35)"
           strokeWidth="1.2"
           strokeDasharray="12 18"
           className="orbit-ring-inner"

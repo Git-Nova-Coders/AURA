@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 /**
  * OscilloscopeCanvas — Real-time GPU compute & inference latency oscilloscope waveform.
  */
-export default function OscilloscopeCanvas({ value = 12.0, color = '#00f0ff' }) {
+export default function OscilloscopeCanvas({ value = 12.0, color = '#818cf8' }) {
   const canvasRef = useRef(null);
   const historyRef = useRef(new Array(40).fill(12.0));
 
@@ -61,8 +61,8 @@ export default function OscilloscopeCanvas({ value = 12.0, color = '#00f0ff' }) 
       ctx.lineTo(0, h);
       ctx.closePath();
       const grad = ctx.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, 'rgba(0, 240, 255, 0.2)');
-      grad.addColorStop(1, 'rgba(0, 240, 255, 0)');
+      grad.addColorStop(0, 'rgba(129, 140, 248, 0.2)');
+      grad.addColorStop(1, 'rgba(129, 140, 248, 0)');
       ctx.fillStyle = grad;
       ctx.fill();
 

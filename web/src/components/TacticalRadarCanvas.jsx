@@ -41,12 +41,12 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
       rings.forEach((rScale, idx) => {
         ctx.beginPath();
         ctx.arc(cx, cy, radius * rScale, 0, Math.PI * 2);
-        ctx.strokeStyle = idx === 2 ? 'rgba(0, 240, 255, 0.35)' : 'rgba(0, 240, 255, 0.1)';
+        ctx.strokeStyle = idx === 2 ? 'rgba(129, 140, 248, 0.35)' : 'rgba(129, 140, 248, 0.1)';
         ctx.lineWidth = idx === 2 ? 1.2 : 0.8;
         ctx.stroke();
 
-        // Distance Range Labels (High contrast cyan)
-        ctx.fillStyle = idx === 2 ? '#00f0ff' : 'rgba(0, 240, 255, 0.75)';
+        // Distance Range Labels (High contrast indigo)
+        ctx.fillStyle = idx === 2 ? '#818cf8' : 'rgba(129, 140, 248, 0.75)';
         ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
         ctx.fillText(`${((idx + 1) * 1.5).toFixed(1)}m`, cx + 6, cy - radius * rScale + 10);
       });
@@ -57,7 +57,7 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
       ctx.lineTo(cx + radius, cy);
       ctx.moveTo(cx, cy - radius);
       ctx.lineTo(cx, cy + radius);
-      ctx.strokeStyle = 'rgba(0, 240, 255, 0.22)';
+      ctx.strokeStyle = 'rgba(129, 140, 248, 0.22)';
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -66,15 +66,15 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, radius, -Math.PI / 2 - Math.PI / 5, -Math.PI / 2 + Math.PI / 5);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 240, 255, 0.06)';
+      ctx.fillStyle = 'rgba(129, 140, 248, 0.06)';
       ctx.fill();
 
       // ── Rotating Holographic Sweep Beam ──
       angle += 0.035;
       const sweepGrad = ctx.createConicGradient(angle, cx, cy);
-      sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0)');
-      sweepGrad.addColorStop(0.82, 'rgba(0, 240, 255, 0)');
-      sweepGrad.addColorStop(1, 'rgba(0, 255, 157, 0.45)');
+      sweepGrad.addColorStop(0, 'rgba(129, 140, 248, 0)');
+      sweepGrad.addColorStop(0.82, 'rgba(129, 140, 248, 0)');
+      sweepGrad.addColorStop(1, 'rgba(168, 85, 247, 0.45)');
 
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -103,7 +103,7 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(bx, by);
-        ctx.strokeStyle = isLocked ? 'rgba(255, 183, 0, 0.7)' : 'rgba(0, 255, 157, 0.35)';
+        ctx.strokeStyle = isLocked ? 'rgba(255, 183, 0, 0.7)' : 'rgba(168, 85, 247, 0.35)';
         ctx.lineWidth = isLocked ? 1.5 : 0.8;
         if (!isLocked) ctx.setLineDash([3, 3]);
         else ctx.setLineDash([]);
@@ -111,12 +111,12 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
         ctx.setLineDash([]);
 
         // ── Entity Blip Point ──
-        ctx.shadowColor = isLocked ? '#ffb700' : '#00ff9d';
+        ctx.shadowColor = isLocked ? '#ffb700' : '#a855f7';
         ctx.shadowBlur = isLocked ? 14 : 8;
 
         ctx.beginPath();
         ctx.arc(bx, by, isLocked ? 5.5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = isLocked ? '#ffb700' : '#00ff9d';
+        ctx.fillStyle = isLocked ? '#ffb700' : '#a855f7';
         ctx.fill();
 
         if (isLocked) {
@@ -146,7 +146,7 @@ export default function TacticalRadarCanvas({ scene, pointedTarget, onSelectEnti
             ctx.beginPath();
             ctx.moveTo(p1.bx, p1.by);
             ctx.lineTo(p2.bx, p2.by);
-            ctx.strokeStyle = 'rgba(0, 255, 157, 0.12)';
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.12)';
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }

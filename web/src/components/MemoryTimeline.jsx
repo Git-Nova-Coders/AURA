@@ -222,13 +222,13 @@ const styles = {
     height: '8px',
     borderRadius: '50%',
     background: 'var(--accent-cyan)',
-    boxShadow: '0 0 6px rgba(0,240,255,0.3)',
+    boxShadow: '0 0 6px rgba(129,140,248,0.3)',
     flexShrink: 0,
   },
   connector: {
     width: '1px',
     flex: 1,
-    background: 'rgba(0,240,255,0.15)',
+    background: 'rgba(129,140,248,0.15)',
     margin: '4px 0',
   },
   eventCard: {

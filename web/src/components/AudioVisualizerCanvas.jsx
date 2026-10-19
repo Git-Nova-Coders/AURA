@@ -36,16 +36,16 @@ export default function AudioVisualizerCanvas({ isActive = false }) {
 
         const grad = ctx.createLinearGradient(0, y, 0, y + amp);
         if (isActive) {
-          grad.addColorStop(0, '#00f0ff');
-          grad.addColorStop(0.5, '#00ff9d');
-          grad.addColorStop(1, '#a855f7');
+          grad.addColorStop(0, '#818cf8');
+          grad.addColorStop(0.5, '#a855f7');
+          grad.addColorStop(1, '#c084fc');
         } else {
-          grad.addColorStop(0, 'rgba(0, 240, 255, 0.4)');
-          grad.addColorStop(1, 'rgba(0, 240, 255, 0.1)');
+          grad.addColorStop(0, 'rgba(129, 140, 248, 0.4)');
+          grad.addColorStop(1, 'rgba(129, 140, 248, 0.1)');
         }
 
         ctx.fillStyle = grad;
-        ctx.shadowColor = isActive ? '#00f0ff' : 'transparent';
+        ctx.shadowColor = isActive ? '#818cf8' : 'transparent';
         ctx.shadowBlur = isActive ? 10 : 0;
 
         ctx.beginPath();

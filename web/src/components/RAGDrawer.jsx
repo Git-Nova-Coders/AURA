@@ -179,8 +179,8 @@ const styles = {
   },
   resultCard: {
     padding: '12px',
-    background: 'rgba(0,240,255,0.03)',
-    border: '1px solid rgba(0,240,255,0.1)',
+    background: 'rgba(129,140,248,0.03)',
+    border: '1px solid rgba(129,140,248,0.1)',
     borderRadius: 'var(--radius-md)',
     marginBottom: 'var(--space-sm)',
     transition: 'border-color var(--transition-fast)',

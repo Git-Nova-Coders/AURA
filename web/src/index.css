@@ -1,49 +1,55 @@
 /* ═══════════════════════════════════════════════════════════════
-   AURA V2 — FUTURISTIC AEROSPACE HUD DESIGN SYSTEM
-   Adaptive Understanding & Reasoning Architecture
+   AURA V3.0 — JARVIS HOLOGRAPHIC DESIGN SYSTEM
+   Adaptive Neural Perception & Reasoning OS
+   Deep Purple + Electric Blue — Iron Man JARVIS Inspired
    ═══════════════════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* ── AURA V2 Electric Hyper-Cyber Palette (Matches Splash Screen) ── */
-  --aura-void: #020612;
-  --aura-deep: #030a1c;
-  --aura-surface: rgba(3, 10, 26, 0.90);
-  --aura-panel: rgba(4, 14, 34, 0.88);
-  --aura-card: rgba(6, 18, 44, 0.82);
+  /* ── AURA V3.0 Deep Purple + Electric Blue Palette ── */
+  --aura-void: #06000f;
+  --aura-deep: #0a0018;
+  --aura-surface: rgba(10, 0, 24, 0.92);
+  --aura-panel: rgba(14, 4, 34, 0.90);
+  --aura-card: rgba(20, 8, 48, 0.85);
 
-  /* Primary Electric Cyber Cyan */
-  --aura-cyan: #00f0ff;
-  --aura-cyan-soft: rgba(0, 240, 255, 0.18);
-  --aura-cyan-glow: 0 0 12px rgba(0, 240, 255, 0.8), 0 0 25px rgba(0, 240, 255, 0.35);
+  /* Primary: Electric Indigo / Blue */
+  --aura-cyan: #818cf8;
+  --aura-cyan-soft: rgba(129, 140, 248, 0.18);
+  --aura-cyan-glow: 0 0 12px rgba(129, 140, 248, 0.8), 0 0 28px rgba(129, 140, 248, 0.3);
 
-  /* Secondary Laser Mint / Emerald */
-  --aura-emerald: #00ff9d;
-  --aura-emerald-soft: rgba(0, 255, 157, 0.18);
-  --aura-emerald-glow: 0 0 12px rgba(0, 255, 157, 0.8), 0 0 25px rgba(0, 255, 157, 0.35);
+  /* Secondary: Violet Purple */
+  --aura-emerald: #a855f7;
+  --aura-emerald-soft: rgba(168, 85, 247, 0.18);
+  --aura-emerald-glow: 0 0 12px rgba(168, 85, 247, 0.8), 0 0 28px rgba(168, 85, 247, 0.3);
 
-  /* Quantum Biometrics & AI (Purple / Violet) */
-  --aura-purple: #c040ff;
-  --aura-purple-soft: rgba(192, 64, 255, 0.18);
-  --aura-purple-glow: 0 0 14px rgba(192, 64, 255, 0.8);
+  /* Accent: Deep Electric Blue */
+  --aura-purple: #6366f1;
+  --aura-purple-soft: rgba(99, 102, 241, 0.18);
+  --aura-purple-glow: 0 0 14px rgba(99, 102, 241, 0.8);
 
-  /* Target Acquisition & High-Alert (Solar Amber) */
-  --aura-amber: #ffb700;
-  --aura-amber-soft: rgba(255, 183, 0, 0.18);
-  --aura-amber-glow: 0 0 14px rgba(255, 183, 0, 0.8);
+  /* Warm Accent: Solar Amber (warnings, latency) */
+  --aura-amber: #f59e0b;
+  --aura-amber-soft: rgba(245, 158, 11, 0.18);
+  --aura-amber-glow: 0 0 14px rgba(245, 158, 11, 0.8);
 
-  /* Alarm / Override (Red) */
-  --aura-red: #ff0055;
-  --aura-red-soft: rgba(255, 0, 85, 0.18);
-  --aura-red-glow: 0 0 14px rgba(255, 0, 85, 0.8);
+  /* Alert / Alarm: Hot Red */
+  --aura-red: #ef4444;
+  --aura-red-soft: rgba(239, 68, 68, 0.18);
+  --aura-red-glow: 0 0 14px rgba(239, 68, 68, 0.8);
 
-  /* High-Contrast Luminous Typography */
-  --text-primary: #ffffff;
-  --text-secondary: #38bdf8; /* High-visibility vibrant sky cyan */
-  --text-muted: #93c5fd;     /* Luminescent soft blue - NEVER unreadable dark gray! */
-  --text-accent: #00ff9d;    /* Laser emerald */
-  --text-code: #00f0ff;      /* Electric cyan */
+  /* Success: Laser Mint (for ONLINE statuses) */
+  --aura-mint: #34d399;
+  --aura-mint-soft: rgba(52, 211, 153, 0.18);
+  --aura-mint-glow: 0 0 12px rgba(52, 211, 153, 0.7);
+
+  /* ── Typography Colors ── */
+  --text-primary: #f0f0ff;
+  --text-secondary: #c4b5fd;    /* Soft lavender */
+  --text-muted: #a78bfa;        /* Muted violet */
+  --text-accent: #818cf8;       /* Electric indigo */
+  --text-code: #c084fc;         /* Bright violet */
 
   /* Backward Compatibility Aliases */
   --accent-cyan: var(--aura-cyan);
@@ -55,11 +61,16 @@
   --bg-panel: var(--aura-panel);
   --bg-card: var(--aura-card);
 
-  /* ── Cybernetic HUD Glass & Borders ── */
-  --hud-border: rgba(0, 240, 255, 0.35);
-  --hud-border-glow: 0 0 15px rgba(0, 240, 255, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.08);
-  --hud-glass: rgba(2, 8, 22, 0.90);
-  --hud-blur: blur(16px);
+  /* ── Holographic Glass & Borders ── */
+  --hud-border: rgba(129, 140, 248, 0.30);
+  --hud-border-glow: 0 0 18px rgba(129, 140, 248, 0.4), inset 0 0 18px rgba(129, 140, 248, 0.06);
+  --hud-glass: rgba(10, 2, 28, 0.92);
+  --hud-blur: blur(20px);
+
+  /* ── Purple Glass Panel ── */
+  --panel-glass: rgba(14, 4, 38, 0.88);
+  --panel-border: rgba(168, 85, 247, 0.22);
+  --panel-glow: 0 0 20px rgba(168, 85, 247, 0.15), inset 0 0 20px rgba(99, 102, 241, 0.05);
 
   /* ── Typography ── */
   --font-display: 'Space Grotesk', sans-serif;
@@ -67,14 +78,15 @@
   --font-body: 'Inter', sans-serif;
 
   /* ── Radii ── */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-full: 9999px;
 
   /* ── Transitions ── */
   --transition-fast: 140ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-base: 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ── Reset & Base ── */
@@ -98,284 +110,151 @@ html, body {
 /* ── Particle Background Canvas ── */
 .cyber-bg-canvas {
   position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100vh;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
   pointer-events: none;
+  opacity: 0.6;
 }
 
-/* ── Glass Panel Utility ── */
-.glass-panel {
-  background: var(--bg-panel);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 1px rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-lg);
-  position: relative;
-  overflow: hidden;
-}
+/* ── Scrollbar Styling ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: rgba(10, 0, 24, 0.4); }
+::-webkit-scrollbar-thumb { background: var(--aura-purple); border-radius: var(--radius-full); }
+::-webkit-scrollbar-thumb:hover { background: var(--aura-cyan); }
 
+/* ── Glass Card Utility ── */
 .glass-card {
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--panel-glass);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius-md);
-  transition: all var(--transition-base);
+  backdrop-filter: var(--hud-blur);
+  box-shadow: var(--panel-glow);
 }
 
-.glass-card:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(0, 240, 255, 0.3);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+/* ── Skeleton Loader ── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(129, 140, 248, 0.06) 25%, rgba(168, 85, 247, 0.12) 50%, rgba(129, 140, 248, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s infinite;
+  border-radius: var(--radius-sm);
 }
 
-/* ── Badges ── */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Badge Utility ── */
 .badge {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
+.badge-cyan { background: var(--aura-cyan-soft); color: var(--aura-cyan); border: 1px solid rgba(129, 140, 248, 0.3); }
+.badge-purple { background: var(--aura-purple-soft); color: var(--aura-purple); border: 1px solid rgba(99, 102, 241, 0.3); }
+.badge-amber { background: var(--aura-amber-soft); color: var(--aura-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge-emerald { background: var(--aura-emerald-soft); color: var(--aura-emerald); border: 1px solid rgba(168, 85, 247, 0.3); }
+.badge-red { background: var(--aura-red-soft); color: var(--aura-red); border: 1px solid rgba(239, 68, 68, 0.3); }
+.badge-mint { background: var(--aura-mint-soft); color: var(--aura-mint); border: 1px solid rgba(52, 211, 153, 0.3); }
 
-.badge-cyan {
-  background: var(--accent-cyan-dim);
-  color: var(--accent-cyan);
-  border: 1px solid rgba(0, 240, 255, 0.3);
+/* ── Animation Primitives ── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
-
-.badge-emerald {
-  background: var(--accent-emerald-dim);
-  color: var(--accent-emerald);
-  border: 1px solid rgba(0, 255, 157, 0.3);
-}
-
-/* ── Animations ── */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.7; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.04); }
-}
-
-@keyframes slide-down {
-  from { opacity: 0; transform: translate(-50%, -20px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(1000%); }
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
-
-@keyframes ring-rotate {
+@keyframes slide-down {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(129, 140, 248, 0.4); }
+  50% { box-shadow: 0 0 20px rgba(129, 140, 248, 0.8), 0 0 40px rgba(168, 85, 247, 0.3); }
+}
+@keyframes spin-slow {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
-
-.animate-pulse {
-  animation: pulse-glow 2s ease-in-out infinite;
+@keyframes spin-reverse-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+@keyframes reactor-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 12px rgba(129, 140, 248, 0.6), 0 0 30px rgba(168, 85, 247, 0.3);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(129, 140, 248, 0.9), 0 0 50px rgba(168, 85, 247, 0.5);
+    transform: scale(1.05);
+  }
+}
+@keyframes beam-scan {
+  from { left: -20%; }
+  to { left: 120%; }
+}
+@keyframes text-flicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%, 98% { opacity: 0.4; }
+  97%, 99% { opacity: 0.9; }
 }
 
-.animate-slide-down {
-  animation: slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
+.animate-fade-in { animation: fade-in 0.4s ease-out; }
+.animate-slide-up { animation: slide-up 0.5s ease-out; }
+.animate-slide-down { animation: slide-down 0.4s ease-out; }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+.font-bold { font-weight: 700; }
 
-.animate-fade-in {
-  animation: fade-in 0.25s ease-out forwards;
-}
+/* ── LED Status Dots ── */
+.led-cyan { background: var(--aura-cyan); box-shadow: 0 0 6px var(--aura-cyan); }
+.led-emerald, .led-purple { background: var(--aura-emerald); box-shadow: 0 0 6px var(--aura-emerald); }
+.led-mint { background: var(--aura-mint); box-shadow: 0 0 6px var(--aura-mint); }
+.led-red { background: var(--aura-red); box-shadow: 0 0 6px var(--aura-red); }
+.led-off { background: rgba(129, 140, 248, 0.15); box-shadow: none; }
 
-/* ── Custom Scrollbars ── */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
+/* ── Value Color Classes ── */
+.val-cyan { color: var(--aura-cyan); }
+.val-emerald { color: var(--aura-emerald); }
+.val-purple { color: var(--aura-purple); }
+.val-amber { color: var(--aura-amber); }
+.val-red { color: var(--aura-red); }
+.val-mint { color: var(--aura-mint); }
+.val-off { color: rgba(129, 140, 248, 0.35); }
 
-::-webkit-scrollbar-track {
-  background: rgba(10, 15, 26, 0.5);
-}
+/* Metric value color variants */
+.metric-val-cyan { color: var(--aura-cyan); }
+.metric-val-emerald { color: var(--aura-emerald); }
+.metric-val-violet { color: var(--aura-purple); }
+.metric-val-amber { color: var(--aura-amber); }
+.metric-val-red { color: var(--aura-red); }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.2);
-  border-radius: 4px;
-}
+/* Gauge value color variants */
+.gauge-val-emerald { color: var(--aura-mint); }
+.gauge-val-cyan { color: var(--aura-cyan); }
+.gauge-val-amber { color: var(--aura-amber); }
+.gauge-val-red { color: var(--aura-red); }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-cyan);
-}
-
-/* ── Perception Mode Filter Chips (Viewport Top Bar) ── */
-.viewport-filter-chips {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(10, 15, 26, 0.6);
-  padding: 2px 4px;
-  border-radius: var(--radius-full);
-  border: 1px solid rgba(0, 240, 255, 0.15);
-}
-
-.chip-filter {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.chip-filter:hover {
-  color: var(--text-primary);
-  background: rgba(0, 240, 255, 0.1);
-  border-color: rgba(0, 240, 255, 0.3);
-}
-
-.chip-filter.chip-active {
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.25), rgba(0, 255, 157, 0.15));
-  border-color: var(--accent-cyan);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
-}
-
-.chip-filter.chip-active-red {
-  background: linear-gradient(135deg, rgba(255, 0, 85, 0.25), rgba(255, 183, 0, 0.15));
-  border-color: var(--accent-red);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(255, 0, 85, 0.4);
-}
-
-/* ── Gesture Standby & Armed Status Pills ── */
-.pill-standby {
-  background: rgba(255, 183, 0, 0.15) !important;
-  border: 1px solid rgba(255, 183, 0, 0.4) !important;
-  color: var(--accent-amber) !important;
-}
-
-.pill-off {
-  background: rgba(255, 0, 85, 0.15) !important;
-  border: 1px solid rgba(255, 0, 85, 0.4) !important;
-  color: var(--accent-red) !important;
-}
-
-.switch-card-off {
-  border-color: rgba(255, 0, 85, 0.3) !important;
-  opacity: 0.85;
-}
-
-.switch-card-off:hover {
-  border-color: var(--accent-red) !important;
-}
-
-.ring-standby {
-  border-color: rgba(255, 183, 0, 0.4) !important;
-  background: rgba(255, 183, 0, 0.08) !important;
-}
-
-.ring-standby:hover {
-  border-color: var(--accent-amber) !important;
-  box-shadow: 0 0 16px rgba(255, 183, 0, 0.3) !important;
-}
-
-/* ── Holo Guide Modal Armed Status Banner ── */
-.holo-modal-status-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 12px 24px 18px 24px;
-  padding: 12px 18px;
-  border-radius: var(--radius-md);
-  border: 1px solid;
-}
-
-.banner-armed {
-  background: linear-gradient(135deg, rgba(0, 255, 157, 0.12), rgba(0, 240, 255, 0.05));
-  border-color: rgba(0, 255, 157, 0.35);
-}
-
-.banner-standby {
-  background: linear-gradient(135deg, rgba(255, 183, 0, 0.12), rgba(255, 0, 85, 0.05));
-  border-color: rgba(255, 183, 0, 0.35);
-}
-
-.status-banner-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-banner-icon {
-  font-size: 1.5rem;
-}
-
-.status-banner-title {
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--text-primary);
-  display: block;
-}
-
-.status-banner-desc {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.btn-toggle-arm {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.btn-arm {
-  background: linear-gradient(135deg, rgba(0, 255, 157, 0.25), rgba(0, 240, 255, 0.2));
-  border-color: var(--accent-emerald);
-  color: #fff;
-  box-shadow: 0 0 14px rgba(0, 255, 157, 0.35);
-}
-
-.btn-arm:hover {
-  background: var(--accent-emerald);
-  color: #04070e;
-  box-shadow: 0 0 20px rgba(0, 255, 157, 0.6);
-}
-
-.btn-disarm {
-  background: rgba(255, 0, 85, 0.15);
-  border-color: rgba(255, 0, 85, 0.4);
-  color: #ff6b8b;
-}
-
-.btn-disarm:hover {
-  background: rgba(255, 0, 85, 0.3);
-  border-color: var(--accent-red);
-  color: #fff;
+/* ── Cyan Pulse (LED animation) ── */
+.cyan-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   AURA V2 HUD FRAME & CORNER RETICLES
+   AURA V3.0 HUD FRAME & CORNER RETICLES
    ═══════════════════════════════════════════════════════════════ */
 
 .aura-hud-frame {
@@ -389,7 +268,7 @@ html, body {
   background: var(--hud-glass);
   backdrop-filter: var(--hud-blur);
   -webkit-backdrop-filter: var(--hud-blur);
-  box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.04), 0 8px 32px rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 20px rgba(129, 140, 248, 0.04), 0 8px 32px rgba(0, 0, 0, 0.7);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -447,7 +326,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 0.58rem;
   letter-spacing: 0.12em;
-  color: var(--aura-gray);
+  color: var(--text-muted);
   z-index: 9;
   pointer-events: none;
 }
@@ -468,12 +347,12 @@ html, body {
 }
 
 .hud-stamp-coords {
-  color: var(--aura-gray-dim);
+  color: var(--text-secondary);
 }
 
 .hud-stamp-status {
   font-weight: 700;
-  color: var(--aura-emerald);
+  color: var(--aura-mint);
 }
 
 .hud-frame-telemetry-bottom {
@@ -484,7 +363,7 @@ html, body {
   align-items: center;
   font-family: var(--font-mono);
   font-size: 0.55rem;
-  color: var(--aura-gray-dim);
+  color: var(--text-muted);
   z-index: 9;
   pointer-events: none;
 }
@@ -497,7 +376,7 @@ html, body {
 .hud-stamp-dashes span {
   width: 8px;
   height: 1.5px;
-  background: rgba(0, 240, 255, 0.3);
+  background: rgba(129, 140, 248, 0.3);
 }
 
 .hud-ambient-scanline {
@@ -582,9 +461,9 @@ html, body {
   font-size: 0.52rem;
   font-weight: 800;
   letter-spacing: 0.14em;
-  color: var(--aura-white);
+  color: #fff;
   pointer-events: none;
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+  text-shadow: 0 0 8px rgba(129, 140, 248, 0.8);
 }
 
 .data-vector-pulse {
@@ -601,7 +480,90 @@ html, body {
 
 @keyframes reactor-think {
   from { transform: scale(0.85); fill: var(--aura-cyan); }
-  to { transform: scale(1.3); fill: var(--aura-purple); filter: drop-shadow(0 0 16px var(--aura-purple)); }
+  to { transform: scale(1.3); fill: var(--aura-emerald); filter: drop-shadow(0 0 16px var(--aura-emerald)); }
 }
 
+/* ── Holo Guide Modal Armed Status Banner ── */
+.holo-modal-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px 24px 18px 24px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+}
 
+.banner-armed {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(129, 140, 248, 0.08));
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.banner-standby {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.05));
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.status-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-banner-icon {
+  font-size: 1.5rem;
+}
+
+.status-banner-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  display: block;
+}
+
+.status-banner-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.btn-toggle-arm {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.btn-arm {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.25), rgba(168, 85, 247, 0.2));
+  border-color: var(--aura-cyan);
+  color: #fff;
+  box-shadow: 0 0 14px rgba(129, 140, 248, 0.35);
+}
+
+.btn-arm:hover {
+  background: var(--aura-cyan);
+  color: #06000f;
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.6);
+}
+
+.btn-disarm {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.btn-disarm:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: var(--aura-red);
+  color: #fff;
+}

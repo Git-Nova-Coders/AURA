@@ -3,12 +3,12 @@ import NeuralCore from '../hud/NeuralCore';
 import { soundFX } from '../../utils/audioFx';
 
 /**
- * BootSequence — AURA V2 Cinematic Operating System Initialization.
- * 4-Phase aerospace startup experience:
- * Phase 01: VOID (Deep abyss with ignition particle)
- * Phase 02: CORE INITIALIZATION (A.U.R.A V2.0, sequential subsystem illumination)
+ * BootSequence — AURA V3.0 JARVIS Holographic Operating System Initialization.
+ * 4-Phase cinematic startup with deep purple + electric blue JARVIS aesthetic:
+ * Phase 01: VOID (Deep purple abyss with ignition particle)
+ * Phase 02: CORE INITIALIZATION (A.U.R.A V3.0, sequential subsystem illumination)
  * Phase 03: SENSOR SYNCHRONIZATION (Data streams flow toward Central Core)
- * Phase 04: PERCEPTION ONLINE (100% sensor link established ➔ collapse into Cockpit)
+ * Phase 04: PERCEPTION ONLINE (100% sensor link established → collapse into Cockpit)
  */
 export default function BootSequence({ onComplete }) {
   const [phase, setPhase] = useState(1);
@@ -98,9 +98,9 @@ export default function BootSequence({ onComplete }) {
       {phase === 2 && (
         <div className="boot-phase-core animate-fade-in">
           <div className="boot-core-center">
-            <NeuralCore size={140} isThinking={true} statusText="AURA 2.0" />
-            <h1 className="boot-title">A.U.R.A V2.0</h1>
-            <span className="boot-sub">UNIVERSAL COGNITIVE PERCEPTION SYSTEM</span>
+            <NeuralCore size={140} isThinking={true} statusText="AURA 3.0" />
+            <h1 className="boot-title">A.U.R.A V3.0</h1>
+            <span className="boot-sub">ADAPTIVE NEURAL PERCEPTION & REASONING OS</span>
           </div>
 
           <div className="boot-subsystems-list">
@@ -126,7 +126,7 @@ export default function BootSequence({ onComplete }) {
           
           <div className="sync-streams-matrix">
             <div className="stream-node">CAMERA ───┐</div>
-            <div className="stream-node">GESTURE ───┼──→ AURA COGNITIVE CORE</div>
+            <div className="stream-node">GESTURE ───┼──→ AURA NEURAL CORE</div>
             <div className="stream-node">OCR ───────┤</div>
             <div className="stream-node">KNOWLEDGE ─┘</div>
           </div>
@@ -141,7 +141,7 @@ export default function BootSequence({ onComplete }) {
           <div className="boot-progress-bar-container">
             <div className="boot-progress-bar-fill" style={{ width: `${progress}%` }} />
           </div>
-          <span className="online-meta">{progress}% // ENVIRONMENTAL SENSOR LINK ESTABLISHED</span>
+          <span className="online-meta">{progress}% // NEURAL SENSOR LINK ESTABLISHED</span>
         </div>
       )}
     </div>
