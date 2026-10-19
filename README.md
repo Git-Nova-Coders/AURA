@@ -49,7 +49,7 @@ The browser opens automatically at **http://localhost:8420**
 python run_dashboard.py
 
 # Webcam with custom model
-python run_dashboard.py --source 0 --model yolov8m-worldv2.pt
+python run_dashboard.py --source 0 --model yoloe-26s-seg.pt
 
 # Video file
 python run_dashboard.py --source video.mp4
@@ -163,7 +163,7 @@ Then accept the certificate warning on your phone (one-time).
 ### Model file not found
 Download the default model:
 ```bash
-python -c "from ultralytics import YOLO; YOLO('yolov8m-worldv2.pt')"
+python -c "from ultralytics import YOLO; YOLO('yoloe-26s-seg.pt')"
 ```
 
 ---
@@ -172,7 +172,7 @@ python -c "from ultralytics import YOLO; YOLO('yolov8m-worldv2.pt')"
 
 | Layer | Technology |
 |---|---|
-| Object Detection | YOLOv8 / YOLO-World (Ultralytics) |
+| Object Detection | YOLO26 / YOLOE Open-Vocabulary (Ultralytics) |
 | Pose & Gesture | MediaPipe |
 | Activity Recognition | CNN-LSTM (PyTorch) |
 | OCR | EasyOCR |

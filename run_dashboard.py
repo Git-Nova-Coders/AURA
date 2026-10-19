@@ -35,8 +35,8 @@ def parse_args():
         help="Camera index, video path, or 'synthetic'. Default: 0 (webcam)",
     )
     parser.add_argument(
-        "--model", type=str, default="yolov8m-worldv2.pt",
-        help="YOLO model path. Default: yolov8m-worldv2.pt",
+        "--model", type=str, default="yoloe-26s-seg.pt",
+        help="YOLO model path. Default: yoloe-26s-seg.pt (YOLO26 Open-Vocabulary)",
     )
     parser.add_argument(
         "--conf", type=float, default=0.35,

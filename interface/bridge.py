@@ -140,7 +140,7 @@ class AuraBridge:
     def __init__(
         self,
         source: str = "synthetic",
-        model_name: str = "yolov8m-worldv2.pt",
+        model_name: str = "yoloe-26s-seg.pt",
         conf_thresh: float = 0.35,
         device: str = "auto",
         width: int = 640,

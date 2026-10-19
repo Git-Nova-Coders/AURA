@@ -65,8 +65,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        default="yolov8m-worldv2.pt",
-        help="YOLO model path. Default: 'yolov8m-worldv2.pt'",
+        default="yoloe-26s-seg.pt",
+        help="YOLO model path. Default: 'yoloe-26s-seg.pt' (YOLO26 Open-Vocabulary)",
     )
     parser.add_argument(
         "--conf",
