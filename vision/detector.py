@@ -316,7 +316,7 @@ class ObjectDetector:
         self.enable_geometric_filter = enable_geometric_filter
         self.class_thresholds = class_thresholds or DEFAULT_CLASS_THRESHOLDS
         self.custom_classes = custom_classes or (
-            DEFAULT_AURA_VOCABULARY if "world" in model_name.lower() else None
+            DEFAULT_AURA_VOCABULARY if any(k in model_name.lower() for k in ("world", "yoloe")) else None
         )
         self.sahi_config = sahi_config
         self._sahi_engine = None
