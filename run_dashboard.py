@@ -83,6 +83,10 @@ def parse_args():
         help="Disable Human Activity Recognition (HAR) in web dashboard.",
     )
     parser.add_argument(
+        "--no-had", action="store_true",
+        help="Disable Human Anomaly Detection (HAD) in web dashboard.",
+    )
+    parser.add_argument(
         "--llm", type=str, default="offline",
         help="LLM provider: offline, gemini, ollama, openai. Default: offline",
     )
@@ -160,6 +164,7 @@ def main():
             enable_memory=not args.no_memory,
             llm_provider=args.llm,
             enable_har=not args.no_har,
+            enable_had=not args.no_had,
         )
     except Exception as e:
         if splash:

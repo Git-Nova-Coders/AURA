@@ -82,6 +82,7 @@ class TelemetrySnapshot:
     ocr_enabled: bool = True
     gestures_enabled: bool = False
     har_enabled: bool = True
+    had_enabled: bool = True
     target_filter_mode: str = "ALL"
     voice_listening: bool = False
     ann_version: Optional[str] = None
@@ -95,6 +96,8 @@ class TelemetrySnapshot:
     active_toast: Optional[str] = None
     har_activity: Optional[str] = None
     har_confidence: float = 0.0
+    had_status: Optional[str] = None
+    had_confidence: float = 0.0
     camera_source: str = "local"
     remote_device_connected: bool = False
     timestamp: float = field(default_factory=time.time)
@@ -112,6 +115,7 @@ class TelemetrySnapshot:
             "ocr_enabled": self.ocr_enabled,
             "gestures_enabled": self.gestures_enabled,
             "har_enabled": self.har_enabled,
+            "had_enabled": self.had_enabled,
             "target_filter_mode": self.target_filter_mode,
             "voice_listening": self.voice_listening,
             "ann_version": self.ann_version,
@@ -125,6 +129,8 @@ class TelemetrySnapshot:
             "active_toast": self.active_toast,
             "har_activity": self.har_activity,
             "har_confidence": round(self.har_confidence, 2),
+            "had_status": self.had_status,
+            "had_confidence": round(self.had_confidence, 2),
             "camera_source": self.camera_source,
             "remote_device_connected": self.remote_device_connected,
             "timestamp": round(self.timestamp, 2),
@@ -162,11 +168,13 @@ class AuraBridge:
         llm_provider: str = "offline",
         enable_gestures: bool = False,
         enable_har: bool = True,
+        enable_had: bool = True,
     ):
         self.source = source
         self.width = width
         self.height = height
         self._enable_har = enable_har
+        self._enable_had = enable_had
 
         # Thread-safe state buffers
         self._lock = threading.Lock()
@@ -308,6 +316,17 @@ class AuraBridge:
                 logger.info("AURA HAR engine active in Web Dashboard.")
             except Exception as e:
                 logger.warning(f"Could not initialize HAR engine in dashboard: {e}")
+
+        # Human Anomaly Detection (HAD) Engine
+        self.had_engine = None
+        if self._enable_had:
+            try:
+                from ml.had.inference import RealTimeHADInference
+                logger.info("Initializing AURA Real-Time Human Anomaly Detection (HAD) for Web Dashboard...")
+                self.had_engine = RealTimeHADInference()
+                logger.info("AURA HAD engine active in Web Dashboard.")
+            except Exception as e:
+                logger.warning(f"Could not initialize HAD engine in dashboard: {e}")
 
         logger.info("AURA Pipeline Bridge initialized successfully.")
 
@@ -715,6 +734,15 @@ class AuraBridge:
                 except Exception as e:
                     logger.warning(f"Dashboard HAR processing error: {e}")
 
+            # 9c. Human Anomaly Detection (HAD) Engine
+            had_status_val = None
+            had_conf_val = 0.0
+            if self._enable_had and self.had_engine is not None and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY:
+                try:
+                    annotated, had_status_val, had_conf_val = self.had_engine.process_frame(annotated, draw_overlay=False)
+                except Exception as e:
+                    logger.warning(f"Dashboard HAD processing error: {e}")
+
             # 10. Encode to JPEG
             _, jpeg_buf = cv2.imencode(
                 ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 75],
@@ -765,6 +793,7 @@ class AuraBridge:
                     ocr_enabled=self._ocr_enabled,
                     gestures_enabled=self._gestures_enabled,
                     har_enabled=self._enable_har,
+                    had_enabled=self._enable_had,
                     target_filter_mode=self._target_filter_mode.value,
                     voice_listening=self._voice_listening,
                     ann_version=self.reliability_ann.model_version,
@@ -777,6 +806,8 @@ class AuraBridge:
                     active_toast=toast_str,
                     har_activity=har_activity_val,
                     har_confidence=har_conf_val,
+                    had_status=had_status_val,
+                    had_confidence=had_conf_val,
                     camera_source=self._camera_source,
                     remote_device_connected=bool(
                         self._remote_frame is not None and (time.time() - self._remote_frame_time) < 4.0
@@ -988,6 +1019,36 @@ class AuraBridge:
         with self._lock:
             self._telemetry.har_enabled = self._enable_har
         return self._enable_har
+
+    def toggle_had(self) -> bool:
+        """Toggles real-time Human Anomaly Detection (HAD) on/off."""
+        self._enable_had = not self._enable_had
+        state_str = "ONLINE (ACTIVE)" if self._enable_had else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🛡️ HAD ANOMALY MONITOR {state_str}", duration=1.8)
+        if self._enable_had and self.had_engine is None:
+            try:
+                from ml.had.inference import RealTimeHADInference
+                self.had_engine = RealTimeHADInference()
+            except Exception as e:
+                logger.warning(f"Could not load HAD engine: {e}")
+        with self._lock:
+            self._telemetry.had_enabled = self._enable_had
+        return self._enable_had
+
+    def set_had(self, enabled: bool) -> bool:
+        """Explicitly sets real-time Human Anomaly Detection (HAD) state."""
+        self._enable_had = enabled
+        state_str = "ONLINE (ACTIVE)" if self._enable_had else "STANDBY (OFF)"
+        self.gesture_controller.trigger_toast(f"🛡️ HAD ANOMALY MONITOR {state_str}", duration=1.8)
+        if self._enable_had and self.had_engine is None:
+            try:
+                from ml.had.inference import RealTimeHADInference
+                self.had_engine = RealTimeHADInference()
+            except Exception as e:
+                logger.warning(f"Could not load HAD engine: {e}")
+        with self._lock:
+            self._telemetry.had_enabled = self._enable_had
+        return self._enable_had
 
     def ingest_remote_frame(self, frame_bgr: np.ndarray, device_info: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -1252,6 +1313,7 @@ class AuraBridge:
             ),
             "ocr_enabled": self._ocr_enabled,
             "har_enabled": self._enable_har,
+            "had_enabled": self._enable_had,
             "voice_listening": self._voice_listening,
             "rag_enabled": self._enable_rag,
             "memory_enabled": self._enable_memory,

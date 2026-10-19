@@ -82,6 +82,13 @@ export default function HoloHeader({
               {telemetry?.har_activity ? telemetry.har_activity.toUpperCase() : 'ACTIVE'}
             </span>
           </div>
+          <div className="v2-sub-item" title={telemetry?.had_status ? `HAD Status: ${telemetry.had_status} (${Math.round((telemetry.had_confidence || 0) * 100)}%)` : 'Human Anomaly Detection Active'}>
+            <span className={`v2-led ${telemetry?.had_status && telemetry.had_status.includes('ANOMALY') ? 'led-rose animate-pulse' : 'led-emerald'}`} />
+            <span className="v2-sub-label">HAD</span>
+            <span className={`v2-sub-val ${telemetry?.had_status && telemetry.had_status.includes('ANOMALY') ? 'val-rose font-bold animate-pulse' : 'val-emerald'}`}>
+              {telemetry?.had_status ? (telemetry.had_status.includes('ANOMALY') ? 'ALERT' : 'NORMAL') : 'ACTIVE'}
+            </span>
+          </div>
         </div>
 
         {/* Precision Numeric Telemetry */}

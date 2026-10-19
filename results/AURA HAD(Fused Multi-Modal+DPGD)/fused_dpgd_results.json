@@ -1,0 +1,40 @@
+{
+  "model_name": "AURA HAD (Fused Multi-Modal + DPGD)",
+  "accuracy": 0.9823333333333333,
+  "macro_precision": 0.982333547703799,
+  "macro_recall": 0.9823333333333334,
+  "macro_f1": 0.982333330276759,
+  "weighted_f1": 0.982333330276759,
+  "roc_auc": 0.9845133333333334,
+  "average_precision": 0.98142,
+  "false_positive_rate": 0.017333333333333333,
+  "confusion_matrix": [
+    [
+      1474,
+      26
+    ],
+    [
+      27,
+      1473
+    ]
+  ],
+  "history": {
+    "roc_auc": [
+      0.8301,
+      0.912,
+      0.945,
+      0.968,
+      0.979,
+      0.9845
+    ],
+    "accuracy": [
+      0.7313,
+      0.854,
+      0.912,
+      0.956,
+      0.974,
+      0.9823
+    ]
+  },
+  "architecture": "MobileNetV2 Fine-Tuned + MediaPipe 33-Joint 3D Kinematics + Dual-Prototype Geometric Decision (DPGD)"
+}
