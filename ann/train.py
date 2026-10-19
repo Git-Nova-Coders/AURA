@@ -173,6 +173,8 @@ def main():
     )
     parser.add_argument(
         "--out-model-path",
+        "--output",
+        "-o",
         type=str,
         default="models/reliability_ann.pth",
         help="Output path for PyTorch weights (.pth). Default: 'models/reliability_ann.pth'",

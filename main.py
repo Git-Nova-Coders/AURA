@@ -548,7 +548,11 @@ def run_pipeline(
 
     window_name = "AURA - Multimodal Visual Agent"
     if not headless:
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        try:
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        except Exception as e:
+            logger.warning(f"GUI display not supported by current OpenCV environment ({e}). Running in headless mode.")
+            headless = True
 
     frame_count = 0
     total_latency = 0.0

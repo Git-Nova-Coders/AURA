@@ -55,6 +55,9 @@ htmlcov/
 *.onnx
 *.pkl
 *.task
+*.ts
+!models/reliability_ann.pth
+!models/scaler.pkl
 models/*.json
 
 # Data
