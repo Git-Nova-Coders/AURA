@@ -45,11 +45,11 @@ export default function HoloHeader({
           </div>
           <div className="v2-brand-text-col">
             <div className="v2-brand-title-line">
-              <span className="v2-brand-name">A.U.R.A. V2.0</span>
-              <span className="v2-brand-tag">CUDA 12.6</span>
+              <span className="v2-brand-name">A.U.R.A. V3.0</span>
+              <span className="v2-brand-tag">YOLO26</span>
             </div>
             <span className="v2-brand-subtitle">
-              UNIVERSAL COGNITIVE OS & CORE ACCELERATOR
+              ADAPTIVE NEURAL PERCEPTION & REASONING OS
             </span>
           </div>
         </div>

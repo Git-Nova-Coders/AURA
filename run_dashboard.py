@@ -111,7 +111,7 @@ def main():
 
     logger.info("=" * 60)
     logger.info("  AURA — Adaptive Understanding & Reasoning Architecture")
-    logger.info("  Interactive Web Dashboard v1.0.0")
+    logger.info("  Interactive Web Dashboard v3.0.0")
     logger.info("=" * 60)
 
     if splash:

@@ -172,7 +172,7 @@ export default function TacticalViewport({
           <div className="v2-title-left">
             <span className="v2-beacon-dot animate-pulse" />
             <span className="v2-viewport-label">PRIMARY SENSOR HUD</span>
-            <span className="v2-viewport-meta">YOLO-WORLDv2 // 640×480 @ {Math.round(telemetry?.fps || 30)} FPS</span>
+            <span className="v2-viewport-meta">YOLO26-OV // 640×480 @ {Math.round(telemetry?.fps || 30)} FPS</span>
           </div>
 
           <div className="v2-title-right">
