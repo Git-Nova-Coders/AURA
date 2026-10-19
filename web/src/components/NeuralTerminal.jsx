@@ -151,8 +151,9 @@ export default function NeuralTerminal({
           {/* 1-Click Deselect All Button */}
           <button
             className="v2-btn-close-inspect"
-            onClick={() => {
-              soundFX.playClick();
+            onClick={(e) => {
+              e.stopPropagation();
+              try { soundFX.playClick(); } catch {}
               if (onDeselectAll) onDeselectAll();
             }}
             title="Deselect all inspected objects and close intelligence layer"
@@ -187,7 +188,7 @@ export default function NeuralTerminal({
                   className="v2-btn-close-pipeline"
                   onClick={(e) => {
                     e.stopPropagation();
-                    soundFX.playClick();
+                    try { soundFX.playClick(); } catch {}
                     if (onDeselectAll) onDeselectAll();
                   }}
                   title="Dismiss Neural Reasoning Pipeline"

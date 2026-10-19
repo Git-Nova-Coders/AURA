@@ -77,6 +77,11 @@ class SoundFXEngine {
     } catch {}
   }
 
+  // 🔘 Tactical Click Sound
+  playClick() {
+    this.playBeep(1046.5, 0.04, 'sine', 0.04);
+  }
+
   // 🤘 Toggle Switch Click Sound
   playToggle(state = true) {
     const freq = state ? 920 : 460;
