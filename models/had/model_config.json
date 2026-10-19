@@ -1,0 +1,16 @@
+{
+    "architecture": "mobilenet",
+    "target_size": [
+        224,
+        224
+    ],
+    "calibrated_for_person_crops": true,
+    "best_val_loss": 0.5065,
+    "best_val_acc": 0.753,
+    "test_acc": 0.7313,
+    "test_roc_auc": 0.8301,
+    "classes": {
+        "0": "Normal",
+        "1": "Anomaly"
+    }
+}

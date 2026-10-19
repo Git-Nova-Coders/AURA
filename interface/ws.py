@@ -163,6 +163,23 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                             "data": {"har_enabled": new_state},
                         }))
 
+                elif msg_type == "toggle_had":
+                    if _bridge:
+                        new_state = _bridge.toggle_had()
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"had_enabled": new_state},
+                        }))
+
+                elif msg_type == "set_had":
+                    enabled = bool(msg.get("enabled", False))
+                    if _bridge:
+                        new_state = _bridge.set_had(enabled)
+                        await websocket.send_text(json.dumps({
+                            "type": "config_update",
+                            "data": {"had_enabled": new_state},
+                        }))
+
                 elif msg_type == "set_target_filter":
                     mode = str(msg.get("mode", "ALL"))
                     if _bridge:

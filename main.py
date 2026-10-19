@@ -249,6 +249,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Enable Human Activity Recognition (HAR) live pose stream & action classification.",
     )
+    parser.add_argument(
+        "--had",
+        action="store_true",
+        default=False,
+        help="Enable Human Anomaly Detection (HAD) live stream & behavioral anomaly classification.",
+    )
     return parser.parse_args()
 
 
@@ -294,6 +300,8 @@ def draw_hud(
     last_subtitle: Optional[str] = None,
     har_activity: Optional[str] = None,
     har_conf: float = 0.0,
+    had_status: Optional[str] = None,
+    had_conf: float = 0.0,
 ) -> np.ndarray:
     """Renders a sleek HUD status bar and bottom subtitle display."""
     h, w = image.shape[:2]
@@ -311,10 +319,11 @@ def draw_hud(
     voice_badge = f" | Voice: {voice_status}" if voice_status != "OFF" else ""
     gesture_badge = f" | 🖐️ {gesture_mode}" if gesture_mode != "ALL_OBJECTS" else ""
     har_badge = f" | 🏃 HAR: {har_activity} ({har_conf*100:.0f}%)" if har_activity else ""
+    had_badge = f" | 🛡️ HAD: {had_status} ({had_conf*100:.0f}%)" if had_status else ""
 
     hud_text = (
         f"AURA v0.8 | {fps:5.1f} FPS | Infer: {latency_ms:4.1f}ms | "
-        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}{gesture_badge}{har_badge}"
+        f"Detections: {num_detections} | {track_str}{sahi_str}{rag_str}{mem_str}{ocr_str}{ann_str}{voice_badge}{gesture_badge}{har_badge}{had_badge}"
     )
 
     # 2. Bottom subtitle banner if there is active speech or response
@@ -387,6 +396,7 @@ def run_pipeline(
     llm_provider: str = "offline",
     enable_gestures: bool = True,
     enable_har: bool = False,
+    enable_had: bool = False,
 ) -> int:
     """Main execution loop for AURA Milestone 8 (Vision + SAHI + Memory + RAG + Voice + Gestures)."""
     source_target = int(source_val) if source_val.isdigit() else source_val
@@ -519,6 +529,17 @@ def run_pipeline(
         except Exception as e:
             logger.warning(f"Could not initialize HAR engine: {e}. Running without HAR.")
 
+    # 6c. Initialize Human Anomaly Detection (HAD) Engine
+    had_engine = None
+    if enable_had:
+        try:
+            from ml.had.inference import RealTimeHADInference
+            logger.info("Initializing AURA Real-Time Human Anomaly Detection (HAD) engine...")
+            had_engine = RealTimeHADInference()
+            logger.info("AURA HAD engine active.")
+        except Exception as e:
+            logger.warning(f"Could not initialize HAD engine: {e}. Running without HAD.")
+
     collector = DatasetCollector() if dataset_csv else None
 
     # 7. Initialize CameraAdapter
@@ -563,6 +584,7 @@ def run_pipeline(
     last_ocr_texts: List[TextDetection] = []
     tracking_active = not no_track
     har_active = enable_har
+    had_active = enable_had
 
     # --- Decoupled Real-Time Inference Threading Setup ---
     use_async = (not sync_mode) and (not use_synthetic) and (not benchmark)
@@ -617,7 +639,7 @@ def run_pipeline(
             ocr_thread.start()
 
     logger.info("Starting visual intelligence loop. Press 'q' or ESC in window to exit...")
-    logger.info("Controls: 'v'=Voice, 'c'=Console Query, 'r'=RAG Lookup, 'k'=Knowledge, 'm'=Memory, 'i'=Scene Info, 't'=Tracker, 'h'=SAHI, 'o'=OCR")
+    logger.info("Controls: 'v'=Voice, 'c'=Console Query, 'r'=RAG Lookup, 'k'=Knowledge, 'm'=Memory, 'i'=Scene Info, 't'=Tracker, 'h'=SAHI, 'o'=OCR, 'a'=HAR, 'n'=HAD")
 
     try:
         while True:
@@ -770,6 +792,15 @@ def run_pipeline(
                 except Exception as e:
                     logger.debug(f"HAR frame processing error: {e}")
 
+            # 10c. Human Anomaly Detection (HAD)
+            had_stat = None
+            had_conf = 0.0
+            if had_active and had_engine is not None:
+                try:
+                    annotated_frame, had_stat, had_conf = had_engine.process_frame(annotated_frame, draw_overlay=False)
+                except Exception as e:
+                    logger.debug(f"HAD frame processing error: {e}")
+
             active_tracks_count = len(tracker.active_tracks) if (tracking_active and tracker) else 0
             ocr_count = len(current_ocr_texts) if ocr_engine is not None else -1
             v_status = voice_assistant.status if voice_assistant else ("IDLE" if enable_voice else "OFF")
@@ -797,6 +828,8 @@ def run_pipeline(
                 last_subtitle=sub_text,
                 har_activity=har_act,
                 har_conf=har_conf,
+                had_status=had_stat,
+                had_conf=had_conf,
             )
 
             frame_count += 1
@@ -901,6 +934,18 @@ def run_pipeline(
                             har_engine = RealTimeHARInference()
                         except Exception as e:
                             logger.warning(f"Could not load HAR engine: {e}")
+                elif key in (ord('n'), ord('N')):
+                    had_active = not had_active
+                    state_str = "ENABLED" if had_active else "DISABLED"
+                    logger.info(f"HAD Human Anomaly Detection toggled: {state_str}")
+                    if gesture_controller:
+                        gesture_controller.trigger_toast(f"🛡️ HAD {state_str}", duration=1.8)
+                    if had_active and had_engine is None:
+                        try:
+                            from ml.had.inference import RealTimeHADInference
+                            had_engine = RealTimeHADInference()
+                        except Exception as e:
+                            logger.warning(f"Could not load HAD engine: {e}")
                 elif key in (ord('s'), ord('S')):
                     filename = f"aura_capture_{int(time.time())}.jpg"
                     cv2.imwrite(filename, annotated_frame)
@@ -976,6 +1021,7 @@ def main():
         llm_provider=args.llm,
         enable_gestures=args.gestures,
         enable_har=args.har,
+        enable_had=args.had,
     )
 
 

@@ -51,6 +51,7 @@ class ConfigUpdateRequest(BaseModel):
     gestures_enabled: Optional[bool] = None
     target_filter_mode: Optional[str] = None
     har_enabled: Optional[bool] = None
+    had_enabled: Optional[bool] = None
     camera_source: Optional[str] = None
 
 
@@ -146,6 +147,7 @@ async def get_config():
         "ocr_enabled": bridge._ocr_enabled,
         "gestures_enabled": bridge._gestures_enabled,
         "har_enabled": bridge._enable_har,
+        "had_enabled": bridge._enable_had,
         "camera_source": bridge._camera_source,
         "remote_device_connected": bool(
             bridge._remote_frame is not None and (bridge._remote_frame_time and (bridge._remote_frame_time > 0))
@@ -197,6 +199,13 @@ async def update_config(request: ConfigUpdateRequest):
             result["har_enabled"] = new_state
         else:
             result["har_enabled"] = bridge._enable_har
+
+    if request.had_enabled is not None:
+        if request.had_enabled != bridge._enable_had:
+            new_state = bridge.set_had(request.had_enabled)
+            result["had_enabled"] = new_state
+        else:
+            result["had_enabled"] = bridge._enable_had
 
     if request.target_filter_mode is not None:
         new_mode = bridge.set_target_filter_mode(request.target_filter_mode)

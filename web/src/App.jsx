@@ -193,6 +193,7 @@ export default function App() {
           onToggleVoice={ws.toggleVoice}
           onToggleGestures={ws.toggleGestures}
           onToggleHAR={ws.toggleHAR}
+          onToggleHAD={ws.toggleHAD}
           onCycleTargetFilter={ws.cycleTargetFilter}
           onSetTargetFilter={ws.setTargetFilter}
         />

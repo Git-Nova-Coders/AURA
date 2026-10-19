@@ -15,6 +15,7 @@ export default function TacticalDeck({
   onToggleVoice,
   onToggleGestures,
   onToggleHAR,
+  onToggleHAD,
   onCycleTargetFilter,
   onSetTargetFilter,
 }) {
@@ -24,6 +25,7 @@ export default function TacticalDeck({
   const isGestures = telemetry?.gestures_enabled ?? false;
   const isVoice = telemetry?.voice_listening || telemetry?.voice_status === 'LISTENING';
   const isHAR = telemetry?.har_enabled ?? true;
+  const isHAD = telemetry?.had_enabled ?? true;
 
   const [localFilterMode, setLocalFilterMode] = useState(
     propFilterMode || telemetry?.target_filter_mode || 'ALL'
@@ -112,6 +114,7 @@ export default function TacticalDeck({
           <span className={`mini-led ${isPerceptionActive ? 'led-cyan' : 'led-off'}`} title="Perception" />
           <span className={`mini-led ${isGestures ? 'led-emerald' : 'led-off'}`} title="Gestures" />
           <span className={`mini-led ${isHAR ? 'led-emerald' : 'led-off'}`} title="HAR Motion" />
+          <span className={`mini-led ${isHAD ? 'led-emerald' : 'led-off'}`} title="HAD Anomaly" />
           <span className={`mini-led ${isSAHI ? 'led-emerald' : 'led-off'}`} title="SAHI" />
           <span className={`mini-led ${isTracking ? 'led-cyan' : 'led-off'}`} title="Tracking" />
           <span className={`mini-led ${isOCR ? 'led-cyan' : 'led-off'}`} title="OCR" />
@@ -250,6 +253,25 @@ export default function TacticalDeck({
             <div className="pod-meta">
               <span className="pod-title">HAR MOTION</span>
               <span className="pod-status">{isHAR ? 'RECOGNIZING' : 'MUTED'}</span>
+            </div>
+          </div>
+
+          {/* Pod 8: HAD Anomaly Detection */}
+          <div
+            className={`v2-control-pod ${isHAD ? 'pod-active' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFX.playToggle(!isHAD);
+              if (onToggleHAD) onToggleHAD();
+            }}
+            title="Toggle Human Anomaly Detection (Visual-Kinematic Geometric Engine)"
+          >
+            <div className="pod-radial-ring ring-rose">
+              <span className="pod-icon">🛡️</span>
+            </div>
+            <div className="pod-meta">
+              <span className="pod-title">HAD ANOMALY</span>
+              <span className="pod-status">{isHAD ? 'MONITORING' : 'MUTED'}</span>
             </div>
           </div>
         </div>

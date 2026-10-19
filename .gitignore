@@ -58,6 +58,8 @@ htmlcov/
 *.ts
 !models/reliability_ann.pth
 !models/scaler.pkl
+!models/had/anomaly_model.pth
+!models/had/model_config.json
 models/*.json
 
 # Data
@@ -96,3 +98,24 @@ certs/key.pem
 certs/*.key
 # cert.pem is machine-specific; regenerated on first run via scripts/gen_ssl_cert.py
 certs/cert.pem
+
+# PDF Documents & Generated Reports
+*.pdf
+*.pptx
+*.docx
+generate_*.py
+scripts/generate_*.py
+scripts/*_pdf.py
+scripts/update_annotated_training_curve.py
+scripts/*_temp.html
+*_temp.html
+
+# HAD Local Artifacts & Datasets
+human_anomaly_detection/dataset/
+human_anomaly_detection/dataset_raw/
+human_anomaly_detection/splits/
+human_anomaly_detection/models/
+human_anomaly_detection/results/
+human_anomaly_detection/venv/
+
+

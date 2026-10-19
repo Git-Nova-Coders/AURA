@@ -172,6 +172,14 @@ export function useWebSocket(url = null) {
     sendMessage({ type: 'set_har', enabled });
   }, [sendMessage]);
 
+  const toggleHAD = useCallback(() => {
+    sendMessage({ type: 'toggle_had' });
+  }, [sendMessage]);
+
+  const setHAD = useCallback((enabled) => {
+    sendMessage({ type: 'set_had', enabled });
+  }, [sendMessage]);
+
   const setCameraSource = useCallback((source) => {
     sendMessage({ type: 'set_camera_source', source });
   }, [sendMessage]);
@@ -218,6 +226,8 @@ export function useWebSocket(url = null) {
     setGestures,
     toggleHAR,
     setHAR,
+    toggleHAD,
+    setHAD,
     setCameraSource,
     sendRemoteFrame,
     setTargetFilter,

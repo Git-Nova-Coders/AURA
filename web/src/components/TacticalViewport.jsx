@@ -286,6 +286,16 @@ export default function TacticalViewport({
               </div>
             )}
 
+            {telemetry?.had_status && (
+              <div
+                className={`v2-pill ${telemetry.had_status.includes('ANOMALY') ? 'v2-pill-rose animate-pulse' : 'v2-pill-emerald'} animate-slide-in`}
+                title={`HAD Confidence: ${Math.round((telemetry.had_confidence || 0) * 100)}%`}
+              >
+                <span className={`v2-pulse-dot ${telemetry.had_status.includes('ANOMALY') ? 'dot-rose animate-pulse' : 'dot-emerald'}`} />
+                <span>🛡️ HAD: {telemetry.had_status.toUpperCase()} ({Math.round((telemetry.had_confidence || 0) * 100)}%)</span>
+              </div>
+            )}
+
             {telemetry?.camera_source === 'remote' && telemetry?.remote_device_connected && (
               <div className="v2-pill v2-pill-emerald animate-slide-in" title="Streaming from external device camera">
                 <span className="v2-pulse-dot dot-emerald animate-pulse" />

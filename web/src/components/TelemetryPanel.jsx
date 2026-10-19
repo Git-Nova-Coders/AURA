@@ -11,6 +11,7 @@ export default function TelemetryPanel({
   onToggleOCR,
   onToggleVoice,
   onToggleHAR,
+  onToggleHAD,
 }) {
   if (!telemetry) {
     return (
@@ -30,6 +31,7 @@ export default function TelemetryPanel({
   const isOCR = telemetry.ocr_enabled ?? true;
   const isVoice = telemetry.voice_listening || telemetry.voice_status === 'LISTENING';
   const isHAR = telemetry.har_enabled ?? true;
+  const isHAD = telemetry.had_enabled ?? true;
 
   return (
     <div className="control-deck glass-card">
@@ -137,6 +139,16 @@ export default function TelemetryPanel({
             <div className="switch-info">
               <span className="switch-name">🏃 HAR Motion</span>
               <span className="switch-status">{isHAR ? 'ACTIVE' : 'OFF'}</span>
+            </div>
+          </label>
+
+          {/* HAD Switch */}
+          <label className="cyber-switch" title="Toggle Human Anomaly Detection (HAD) Engine">
+            <input type="checkbox" checked={isHAD} onChange={onToggleHAD} id="switch-had" />
+            <span className="cyber-switch-slider" />
+            <div className="switch-info">
+              <span className="switch-name">🛡️ HAD Anomaly</span>
+              <span className="switch-status">{isHAD ? 'ACTIVE' : 'OFF'}</span>
             </div>
           </label>
         </div>

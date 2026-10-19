@@ -83,6 +83,15 @@ export default function ActiveStateBanners({ telemetry, activeToast }) {
             <span className="pill-label">HAR: {telemetry.har_activity.toUpperCase()} ({(telemetry.har_confidence * 100).toFixed(0)}%)</span>
           </div>
         )}
+
+        {/* HAD Anomaly Monitor Pill */}
+        {telemetry?.had_enabled && telemetry?.had_status && (
+          <div className={`status-pill ${telemetry.had_status.includes('ANOMALY') ? 'status-pill-anomaly animate-pulse' : 'status-pill-had'} animate-slide-in`}>
+            <span className={`pill-dot ${telemetry.had_status.includes('ANOMALY') ? 'rose-pulse' : 'emerald-pulse'}`}></span>
+            <span className="pill-icon">{telemetry.had_status.includes('ANOMALY') ? '🚨' : '🛡️'}</span>
+            <span className="pill-label">HAD: {telemetry.had_status.toUpperCase()} ({(telemetry.had_confidence * 100).toFixed(0)}%)</span>
+          </div>
+        )}
       </div>
     </>
   );

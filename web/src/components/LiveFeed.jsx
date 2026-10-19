@@ -123,6 +123,14 @@ export default function LiveFeed({ frame, scene, telemetry, activeToast, onObjec
               🏃 {telemetry.har_activity.toUpperCase()}
             </span>
           )}
+          {telemetry?.had_status && (
+            <span
+              className={`badge ${telemetry.had_status.includes('ANOMALY') ? 'badge-rose animate-pulse' : 'badge-emerald'}`}
+              title={`HAD Confidence: ${Math.round((telemetry.had_confidence || 0) * 100)}%`}
+            >
+              🛡️ {telemetry.had_status.toUpperCase()}
+            </span>
+          )}
           {telemetry?.ocr_text_count > 0 && (
             <span className="badge badge-emerald">{telemetry.ocr_text_count} OCR Texts</span>
           )}
