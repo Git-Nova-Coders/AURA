@@ -24,8 +24,8 @@ class HolographicSplash:
 
     def __init__(
         self,
-        title: str = "A.U.R.A.  V1.0",
-        subtitle: str = "UNIVERSAL COGNITIVE OS & CORE ACCELERATOR",
+        title: str = "A.U.R.A.  V3.0",
+        subtitle: str = "AUTONOMOUS REALITY ARCHITECTURE // NEURAL COGNITION OS",
         width: int = 680,
         height: int = 400,
     ):
@@ -46,11 +46,12 @@ class HolographicSplash:
         self.boot_logs: List[str] = [
             "INITIALIZING MULTIMODAL CONTEXT STREAM... ACTIVE",
             "SYNCING LOCAL MEMORY VECTOR DATABASE... COMPILED",
-            "RESOLVING HARDWARE ACCELERATOR (RTX 3050 Ti)... NOMINAL",
+            "RESOLVING HARDWARE ACCELERATOR (GPU ACCELERATED)... NOMINAL",
             "ROUTING AUDIO PRE-PROCESSING FILTERS... ACTIVE",
             "CALIBRATING 21-LANDMARK 3D TRACKING SENSORS... SYNCHRONIZED",
             "CONNECTING KNOWLEDGE RETRIEVER & RAG STACK... SECURED",
             "OPTIMIZING CORE THREAD POOL PIPELINES... STABLE",
+            "LOADING YOLO26 NEURAL VISION WEIGHTS... NOMINAL",
         ]
         self._visible_log_count = 1
         self._last_log_time = time.time()
