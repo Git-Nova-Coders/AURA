@@ -111,7 +111,7 @@ export default function LiveFeed({ frame, scene, telemetry, activeToast, onObjec
       <div className="feed-title-bar">
         <div className="feed-title-left">
           <span className="feed-icon">📹</span>
-          <span className="panel-title">Cybernetic Perception Feed</span>
+          <span className="panel-title">Neural Perception Feed</span>
           {isFrozen && <span className="badge badge-cyan">❄️ FROZEN</span>}
         </div>
         <div className="feed-title-right">

@@ -31,9 +31,9 @@ export default function BrandHeader({ isConnected, telemetry, onOpenGuide }) {
           <div>
             <h1 className="brand-title">
               <span style={{ color: glowColor }}>AURA</span>
-              <span className="brand-version-tag">CYBERNETIC 3D</span>
+              <span className="brand-version-tag">NEURAL 3D</span>
             </h1>
-            <p className="brand-subtitle">Adaptive Understanding & Reasoning Architecture</p>
+            <p className="brand-subtitle">Adaptive Understanding & Reasoning Architecture — V3.0</p>
           </div>
         </div>
 
@@ -42,8 +42,8 @@ export default function BrandHeader({ isConnected, telemetry, onOpenGuide }) {
           {/* GPU Hardware Acceleration Pill */}
           <div className="hardware-pill glass-card">
             <span className="hw-icon">⚡</span>
-            <span className="hw-label">RTX 3050 Ti</span>
-            <span className="badge badge-cyan">CUDA 12.6</span>
+            <span className="hw-label">GPU ACCELERATED</span>
+            <span className="badge badge-cyan">YOLO26</span>
           </div>
 
           {/* Latency Gauge */}

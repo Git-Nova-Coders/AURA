@@ -6,7 +6,7 @@ import { soundFX } from '../../utils/audioFx';
  * BootSequence — AURA V2 Cinematic Operating System Initialization.
  * 4-Phase aerospace startup experience:
  * Phase 01: VOID (Deep abyss with ignition particle)
- * Phase 02: CORE INITIALIZATION (A.U.R.A V2.0, sequential subsystem illumination)
+ * Phase 02: CORE INITIALIZATION (A.U.R.A V3.0, sequential subsystem illumination)
  * Phase 03: SENSOR SYNCHRONIZATION (Data streams flow toward Central Core)
  * Phase 04: PERCEPTION ONLINE (100% sensor link established ➔ collapse into Cockpit)
  */
@@ -98,9 +98,9 @@ export default function BootSequence({ onComplete }) {
       {phase === 2 && (
         <div className="boot-phase-core animate-fade-in">
           <div className="boot-core-center">
-            <NeuralCore size={140} isThinking={true} statusText="AURA 2.0" />
-            <h1 className="boot-title">A.U.R.A V2.0</h1>
-            <span className="boot-sub">UNIVERSAL COGNITIVE PERCEPTION SYSTEM</span>
+            <NeuralCore size={140} isThinking={true} statusText="AURA 3.0" />
+            <h1 className="boot-title">A.U.R.A V3.0</h1>
+            <span className="boot-sub">ADAPTIVE NEURAL PERCEPTION & REASONING OS</span>
           </div>
 
           <div className="boot-subsystems-list">
