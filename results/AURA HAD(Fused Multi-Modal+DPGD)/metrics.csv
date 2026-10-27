@@ -1,0 +1,2 @@
+Model,Accuracy (%),Macro Precision (%),Macro Recall (%),Macro F1 (%),Weighted F1 (%),ROC-AUC,Architecture
+AURA HAD (Fused Multi-Modal + DPGD),98.23,98.23,98.23,98.23,98.23,0.9845,MobileNetV2 + 3D Kinematics + DPGD

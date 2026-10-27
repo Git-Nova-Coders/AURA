@@ -1,0 +1,2 @@
+Model,Accuracy (%),Macro Precision (%),Macro Recall (%),Macro F1 (%),Weighted F1 (%),ROC-AUC,Architecture
+MobileNetV2 + DPGD,73.13,73.22,73.13,73.11,73.11,0.8301,MobileNetV2 Anomaly Classifier

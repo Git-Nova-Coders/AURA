@@ -1,1 +1,56 @@
+# ─────────────────────────────────────────────────────────────────
+#  AURA — Core Python Dependencies
+#  Install: pip install -r requirements.txt
+#
+#  NOTE: PyTorch (torch/torchvision/torchaudio) is NOT listed here
+#  because the correct version depends on whether you have an
+#  NVIDIA GPU (CUDA) or CPU-only. See SETUP instructions below.
+# ─────────────────────────────────────────────────────────────────
 
+# ── Vision & Detection ────────────────────────────────────────────
+numpy
+opencv-python
+scikit-image
+Pillow
+
+# ── YOLO / Object Detection ───────────────────────────────────────
+ultralytics
+
+# ── Pose / Gesture / HAR ──────────────────────────────────────────
+mediapipe
+
+# ── OCR ───────────────────────────────────────────────────────────
+easyocr
+
+# ── Web Server / API / WebSocket ──────────────────────────────────
+fastapi
+uvicorn[standard]
+websockets
+pydantic
+starlette
+python-multipart
+
+# ── HTTP client ───────────────────────────────────────────────────
+requests
+httpx
+
+# ── Data / ML ─────────────────────────────────────────────────────
+pandas
+scikit-learn
+scipy
+matplotlib
+tqdm
+joblib
+
+# ── Audio (Voice Assistant) ───────────────────────────────────────
+sounddevice
+
+# ── SSL / TLS (for remote camera HTTPS support) ───────────────────
+cryptography
+
+# ── Misc ──────────────────────────────────────────────────────────
+PyYAML
+colorama
+regex
+shapely
+psutil

@@ -1,0 +1,57 @@
+{
+  "BodyWeightSquats": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 12.0
+  },
+  "JumpRope": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 16.0
+  },
+  "JumpingJack": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 13.0
+  },
+  "Lunges": {
+    "precision": 1.0,
+    "recall": 0.9230769230769231,
+    "f1-score": 0.96,
+    "support": 13.0
+  },
+  "PushUps": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 11.0
+  },
+  "TaiChi": {
+    "precision": 0.9166666666666666,
+    "recall": 1.0,
+    "f1-score": 0.9565217391304348,
+    "support": 11.0
+  },
+  "WallPushups": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 2.0
+  },
+  "accuracy": 0.9871794871794872,
+  "macro avg": {
+    "precision": 0.9880952380952381,
+    "recall": 0.989010989010989,
+    "f1-score": 0.9880745341614906,
+    "support": 78.0
+  },
+  "weighted avg": {
+    "precision": 0.9882478632478632,
+    "recall": 0.9871794871794872,
+    "f1-score": 0.9872017837235229,
+    "support": 78.0
+  }
+}

@@ -1,0 +1,47 @@
+# Virtual environments
+venv/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Datasets
+dataset/
+dataset_raw/
+splits/
+*.zip
+*.tar.gz
+*.tar
+
+# Models and checkpoints
+models/
+*.h5
+*.keras
+*.pt
+*.pth
+
+# Results and logs
+results/
+logs/
+*.log
+
+# Presentations, documents & export files
+*.pptx
+*.ppt
+*.docx
+*.pdf
+generate_*.py
+presentation_*.py
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# AI Agent Guides
+Human_Anomaly_Detection_*.md

@@ -1,0 +1,18 @@
+# AURA Workstation & Laptop User Manual
+
+## 1. System Overview
+The AURA Laptop Computer is a high-performance portable workstation designed for visual artificial intelligence processing, edge neural network inference, and multimodal reasoning.
+
+## 2. Power and Thermal Management
+- To turn on the laptop, press the power button located at the top-right corner of the keyboard deck.
+- Always operate the laptop on a hard, flat surface (such as a desk) to maintain proper airflow and ventilation.
+- Ensure the cooling vents located along the bottom and rear edges are clear of obstruction.
+
+## 3. Peripheral Connections
+- USB-C Thunderbolt 4: Connect external 4K monitors, high-speed camera adapters, and docking stations.
+- HDMI 2.1: Direct video output to projectors and auxiliary displays.
+- Audio Jack: 3.5mm headphone and microphone combo port for high-fidelity voice interaction.
+
+## 4. Maintenance and Care
+- Clean the display using a dry microfiber cloth. Do not apply liquid cleaners directly to the screen.
+- Shut down the device cleanly before transporting it in a backpack or carrying case.
