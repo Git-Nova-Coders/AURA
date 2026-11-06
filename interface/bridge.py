@@ -728,9 +728,16 @@ class AuraBridge:
             # 9b. Human Activity Recognition (HAR) Engine
             har_activity_val = None
             har_conf_val = 0.0
+            har_pose = None
             if self._enable_har and self.har_engine is not None and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY:
                 try:
-                    annotated, har_activity_val, har_conf_val = self.har_engine.process_frame(annotated, draw_overlay=False)
+                    annotated, har_activity_val, har_conf_val = self.har_engine.process_frame(
+                        annotated,
+                        draw_overlay=False,
+                        draw_skeleton=True,
+                        clean_frame=raw_img,
+                    )
+                    har_pose = getattr(self.har_engine, "last_pose_data", None)
                 except Exception as e:
                     logger.warning(f"Dashboard HAR processing error: {e}")
 
@@ -739,7 +746,15 @@ class AuraBridge:
             had_conf_val = 0.0
             if self._enable_had and self.had_engine is not None and self._target_filter_mode != TargetFilterMode.OBJECTS_ONLY:
                 try:
-                    annotated, had_status_val, had_conf_val = self.had_engine.process_frame(annotated, draw_overlay=False)
+                    # Prevent dual bone-links: if HAR already detected and rendered the skeleton, suppress HAD duplicate rendering
+                    already_rendered_skeleton = bool(har_pose and getattr(har_pose, "detected", False))
+                    annotated, had_status_val, had_conf_val = self.had_engine.process_frame(
+                        annotated,
+                        draw_overlay=False,
+                        draw_skeleton=not already_rendered_skeleton,
+                        external_pose_data=har_pose,
+                        clean_frame=raw_img,
+                    )
                 except Exception as e:
                     logger.warning(f"Dashboard HAD processing error: {e}")
 
