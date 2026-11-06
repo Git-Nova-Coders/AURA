@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from vision.pose.pose_detector import PoseDetector, draw_pose_skeleton
+from vision.pose.pose_detector import PoseDetector, PoseLandmarkData, draw_pose_skeleton
 from ml.har.preprocess import normalize_pose_frame, SEQUENCE_LENGTH
 from ml.har.models import HybridPoseCNNLSTM
 
@@ -91,8 +91,16 @@ class RealTimeHARInference:
         self.vote_history = collections.deque(maxlen=7)
         self.last_activity = "Initializing..."
         self.last_confidence = 0.0
+        self.last_pose_data: Optional[PoseLandmarkData] = None
 
-    def process_frame(self, frame: np.ndarray, draw_overlay: bool = True) -> Tuple[np.ndarray, str, float]:
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        draw_overlay: bool = True,
+        draw_skeleton: bool = True,
+        external_pose_data: Optional[PoseLandmarkData] = None,
+        clean_frame: Optional[np.ndarray] = None,
+    ) -> Tuple[np.ndarray, str, float]:
         """
         Processes single camera frame:
         - Detects pose
@@ -102,8 +110,16 @@ class RealTimeHARInference:
         - Applies 7-frame majority voting temporal filter for rock-solid stability
         - Optionally overlays HUD
         """
-        h, w = frame.shape[:2]
-        pose_data = self.detector.process_frame(frame)
+
+        eval_frame = clean_frame if clean_frame is not None else frame
+        h, w = eval_frame.shape[:2]
+
+        if external_pose_data is not None:
+            pose_data = external_pose_data
+        else:
+            pose_data = self.detector.process_frame(eval_frame)
+
+        self.last_pose_data = pose_data
 
         if pose_data.detected:
             normed = normalize_pose_frame(pose_data.landmarks)
@@ -311,7 +327,8 @@ class RealTimeHARInference:
 
         annotated = frame.copy()
         if pose_data.detected:
-            annotated = draw_pose_skeleton(annotated, pose_data.landmarks)
+            if draw_skeleton:
+                annotated = draw_pose_skeleton(annotated, pose_data.landmarks)
 
         if not draw_overlay:
             return annotated, self.last_activity, self.last_confidence

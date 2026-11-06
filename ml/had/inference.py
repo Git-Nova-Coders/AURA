@@ -30,7 +30,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from vision.pose.pose_detector import PoseDetector, draw_pose_skeleton
+from vision.pose.pose_detector import PoseDetector, PoseLandmarkData, draw_pose_skeleton
 from ml.had.models import get_model, MobileNetV2AnomalyClassifier
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -211,6 +211,7 @@ class RealTimeHADInference:
         self.last_confidence = 0.95
         self.last_anomaly_prob = 0.05
         self.last_geometric_margin = 0.0
+        self.last_pose_data: Optional[PoseLandmarkData] = None
 
     def _extract_person_crop(self, frame: np.ndarray, landmarks: Optional[np.ndarray]) -> np.ndarray:
         """
@@ -273,7 +274,9 @@ class RealTimeHADInference:
         self,
         frame: np.ndarray,
         draw_overlay: bool = True,
-        external_pose_data = None
+        external_pose_data: Optional[PoseLandmarkData] = None,
+        draw_skeleton: bool = True,
+        clean_frame: Optional[np.ndarray] = None,
     ) -> Tuple[np.ndarray, str, float]:
         """
         Processes single camera frame:
@@ -284,20 +287,23 @@ class RealTimeHADInference:
         - Applies 7-frame temporal smoothing
         - Returns (annotated_frame, status_label, confidence)
         """
-        h, w = frame.shape[:2]
+        eval_frame = clean_frame if clean_frame is not None else frame
+        h, w = eval_frame.shape[:2]
 
         # 1. Pose Landmark Extraction
         if external_pose_data is not None:
             pose_data = external_pose_data
         else:
-            pose_data = self.detector.process_frame(frame)
+            pose_data = self.detector.process_frame(eval_frame)
+
+        self.last_pose_data = pose_data
 
         if pose_data.detected:
             self.pose_buffer.append(pose_data.landmarks)
-            crop = self._extract_person_crop(frame, pose_data.landmarks)
+            crop = self._extract_person_crop(eval_frame, pose_data.landmarks)
         else:
             self.pose_buffer.append(np.zeros((33, 4), dtype=np.float32))
-            crop = self._extract_person_crop(frame, None)
+            crop = self._extract_person_crop(eval_frame, None)
 
         # 2. Visual Model Anomaly Prediction (P_vis)
         vis_prob = self._predict_visual(crop)
@@ -397,7 +403,8 @@ class RealTimeHADInference:
 
         annotated = frame.copy()
         if pose_data.detected:
-            annotated = draw_pose_skeleton(annotated, pose_data.landmarks)
+            if draw_skeleton:
+                annotated = draw_pose_skeleton(annotated, pose_data.landmarks)
 
         if not draw_overlay:
             return annotated, self.last_status, self.last_confidence
