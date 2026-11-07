@@ -150,7 +150,9 @@ async def get_config():
         "had_enabled": bridge._enable_had,
         "camera_source": bridge._camera_source,
         "remote_device_connected": bool(
-            bridge._remote_frame is not None and (bridge._remote_frame_time and (bridge._remote_frame_time > 0))
+            bridge._remote_frame is not None
+            and isinstance(getattr(bridge, "_remote_frame_time", None), (int, float))
+            and bridge._remote_frame_time > 0
         ),
         "target_filter_mode": bridge._target_filter_mode.value,
         "memory_enabled": bridge._enable_memory,

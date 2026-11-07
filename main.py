@@ -786,9 +786,16 @@ def run_pipeline(
             # 10b. Human Activity Recognition (HAR)
             har_act = None
             har_conf = 0.0
+            har_pose = None
             if har_active and har_engine is not None:
                 try:
-                    annotated_frame, har_act, har_conf = har_engine.process_frame(annotated_frame, draw_overlay=False)
+                    annotated_frame, har_act, har_conf = har_engine.process_frame(
+                        annotated_frame,
+                        draw_overlay=False,
+                        draw_skeleton=True,
+                        clean_frame=frame,
+                    )
+                    har_pose = getattr(har_engine, "last_pose_data", None)
                 except Exception as e:
                     logger.debug(f"HAR frame processing error: {e}")
 
@@ -797,7 +804,15 @@ def run_pipeline(
             had_conf = 0.0
             if had_active and had_engine is not None:
                 try:
-                    annotated_frame, had_stat, had_conf = had_engine.process_frame(annotated_frame, draw_overlay=False)
+                    # Prevent dual bone-links: if HAR already detected and rendered the skeleton, suppress HAD duplicate rendering
+                    already_rendered_skeleton = bool(har_pose and getattr(har_pose, "detected", False))
+                    annotated_frame, had_stat, had_conf = had_engine.process_frame(
+                        annotated_frame,
+                        draw_overlay=False,
+                        draw_skeleton=not already_rendered_skeleton,
+                        external_pose_data=har_pose,
+                        clean_frame=frame,
+                    )
                 except Exception as e:
                     logger.debug(f"HAD frame processing error: {e}")
 
